@@ -7,9 +7,10 @@ import { BodyAssemblyDashboard } from './components/BodyAssemblyDashboard';
 import { PaintQualityDashboard } from './components/PaintQualityDashboard';
 import { FacilityDashboard } from './components/FacilityDashboard';
 import { MainDashboard } from './components/MainDashboard';
+import { BatteryDashboard } from './components/BatteryDashboard';
 import { AIChatbot } from './components/AIChatbot';
 
-export type MenuType = 'main' | 'press' | 'engine' | 'body' | 'paint' | 'facility';
+export type MenuType = 'main' | 'press' | 'engine' | 'body' | 'paint' | 'battery' | 'facility';
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -44,6 +45,8 @@ export default function App() {
         return <BodyAssemblyDashboard />;
       case 'paint':
         return <PaintQualityDashboard />;
+      case 'battery':
+        return <BatteryDashboard />;
       case 'facility':
         return <FacilityDashboard />;
       default:
@@ -53,8 +56,8 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-gray-50">
-      <Sidebar 
-        selectedMenu={selectedMenu} 
+      <Sidebar
+        selectedMenu={selectedMenu}
         onMenuSelect={setSelectedMenu}
         username={username}
         onLogout={handleLogout}

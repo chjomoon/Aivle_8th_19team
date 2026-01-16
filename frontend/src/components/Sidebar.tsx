@@ -1,4 +1,4 @@
-import { Factory, Cpu, Box, Droplet, Settings, LayoutDashboard, LogOut, User } from 'lucide-react';
+import { Factory, Cpu, Box, Droplet, Settings, LayoutDashboard, LogOut, User, Battery } from 'lucide-react';
 import { MenuType } from '../App';
 
 interface SidebarProps {
@@ -15,6 +15,7 @@ export function Sidebar({ selectedMenu, onMenuSelect, username, onLogout }: Side
     { id: 'engine' as MenuType, label: '엔진 조립', icon: Cpu },
     { id: 'body' as MenuType, label: '차체 조립', icon: Box },
     { id: 'paint' as MenuType, label: '도장 품질', icon: Droplet },
+    { id: 'battery' as MenuType, label: '배터리 예지보전', icon: Battery },
     { id: 'facility' as MenuType, label: '설비', icon: Settings },
   ];
 
@@ -37,21 +38,20 @@ export function Sidebar({ selectedMenu, onMenuSelect, username, onLogout }: Side
           </div>
         </div>
       </div>
-      
+
       <nav className="flex-1 p-4">
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isSelected = selectedMenu === item.id;
-          
+
           return (
             <button
               key={item.id}
               onClick={() => onMenuSelect(item.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg mb-2 transition-colors ${
-                isSelected
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg mb-2 transition-colors ${isSelected
                   ? 'bg-blue-600 text-white'
                   : 'text-slate-300 hover:bg-slate-800'
-              }`}
+                }`}
             >
               <Icon className="w-5 h-5" />
               <span>{item.label}</span>
@@ -59,7 +59,7 @@ export function Sidebar({ selectedMenu, onMenuSelect, username, onLogout }: Side
           );
         })}
       </nav>
-      
+
       <div className="p-4 border-t border-slate-700">
         <button
           onClick={onLogout}
