@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LoginPage } from './components/LoginPage';
+import { SignupPage } from './components/SignupPage';
 import { Sidebar } from './components/Sidebar';
 import { PressMachineDashboard } from './components/PressMachineDashboard';
 import { EngineAssemblyDashboard } from './components/EngineAssemblyDashboard';
@@ -7,63 +9,96 @@ import { BodyAssemblyDashboard } from './components/BodyAssemblyDashboard';
 import { PaintQualityDashboard } from './components/PaintQualityDashboard';
 import { FacilityDashboard } from './components/FacilityDashboard';
 import { MainDashboard } from './components/MainDashboard';
+import { BatteryDashboard } from './components/BatteryDashboard';
 import { AIChatbot } from './components/AIChatbot';
+import { BoardListPage } from './components/Board/BoardListPage';
+import { BoardWritePage } from './components/Board/BoardWritePage';
+import { BoardDetailPage } from './components/Board/BoardDetailPage';
 
-export type MenuType = 'main' | 'press' | 'engine' | 'body' | 'paint' | 'facility';
+function Layout({ children, username, onLogout }: { children: React.ReactNode, username: string, onLogout: () => void }) {
+  return (
+    <div className="flex h-screen bg-gray-50">
+      <Sidebar username={username} onLogout={onLogout} />
+      <main className="flex-1 overflow-auto">
+        {children}
+      </main>
+      <AIChatbot />
+    </div>
+  );
+}
+
+function ProtectedRoute({ children, isLoggedIn }: { children: JSX.Element, isLoggedIn: boolean }) {
+  if (!isLoggedIn) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+}
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
-  const [selectedMenu, setSelectedMenu] = useState<MenuType>('main');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Check for existing session
+    const token = localStorage.getItem('token');
+    const savedUsername = localStorage.getItem('username');
+    if (token && savedUsername) {
+      setIsLoggedIn(true);
+      setUsername(savedUsername);
+    }
+    setLoading(false);
+  }, []);
 
   const handleLogin = (user: string) => {
-    setUsername(user);
+    // In a real app you might pass token here too, but checking localStorage in useEffect handles persistence
+    // For immediate state update:
+    const savedUsername = localStorage.getItem('username');
+    setUsername(user || savedUsername || 'User');
     setIsLoggedIn(true);
   };
 
   const handleLogout = () => {
     setIsLoggedIn(false);
     setUsername('');
-    setSelectedMenu('main');
+    localStorage.removeItem('token');
+    localStorage.removeItem('username');
   };
 
-  // Show login page if not logged in
-  if (!isLoggedIn) {
-    return <LoginPage onLogin={handleLogin} />;
-  }
-
-  const renderDashboard = () => {
-    switch (selectedMenu) {
-      case 'main':
-        return <MainDashboard />;
-      case 'press':
-        return <PressMachineDashboard />;
-      case 'engine':
-        return <EngineAssemblyDashboard />;
-      case 'body':
-        return <BodyAssemblyDashboard />;
-      case 'paint':
-        return <PaintQualityDashboard />;
-      case 'facility':
-        return <FacilityDashboard />;
-      default:
-        return <MainDashboard />;
-    }
-  };
+  if (loading) return <div>Loading...</div>;
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      <Sidebar 
-        selectedMenu={selectedMenu} 
-        onMenuSelect={setSelectedMenu}
-        username={username}
-        onLogout={handleLogout}
-      />
-      <main className="flex-1 overflow-auto">
-        {renderDashboard()}
-      </main>
-      {/* AI Chatbot - Only visible when logged in */}
-      <AIChatbot />
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={
+          isLoggedIn ? <Navigate to="/" replace /> : <LoginPage onLogin={handleLogin} />
+        } />
+        <Route path="/signup" element={
+          isLoggedIn ? <Navigate to="/" replace /> : <SignupPage />
+        } />
+
+        {/* Protected Routes */}
+        <Route path="/*" element={
+          <ProtectedRoute isLoggedIn={isLoggedIn}>
+            <Layout username={username} onLogout={handleLogout}>
+              <Routes>
+                <Route path="/" element={<MainDashboard />} />
+                <Route path="/press" element={<PressMachineDashboard />} />
+                <Route path="/engine" element={<EngineAssemblyDashboard />} />
+                <Route path="/body" element={<BodyAssemblyDashboard />} />
+                <Route path="/paint" element={<PaintQualityDashboard />} />
+                <Route path="/battery" element={<BatteryDashboard />} />
+                <Route path="/facility" element={<FacilityDashboard />} />
+
+                {/* Board Routes */}
+                <Route path="/board" element={<BoardListPage />} />
+                <Route path="/board/write" element={<BoardWritePage />} />
+                <Route path="/board/:id" element={<BoardDetailPage />} />
+              </Routes>
+            </Layout>
+          </ProtectedRoute>
+        } />
+      </Routes>
+    </BrowserRouter>
   );
 }

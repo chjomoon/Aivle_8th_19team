@@ -1,21 +1,23 @@
-import { Factory, Cpu, Box, Droplet, Settings, LayoutDashboard, LogOut, User } from 'lucide-react';
-import { MenuType } from '../App';
+import { Link, useLocation } from 'react-router-dom';
+import { Factory, Cpu, Box, Droplet, Settings, LayoutDashboard, LogOut, User, ClipboardList, Battery } from 'lucide-react';
 
 interface SidebarProps {
-  selectedMenu: MenuType;
-  onMenuSelect: (menu: MenuType) => void;
   username: string;
   onLogout: () => void;
 }
 
-export function Sidebar({ selectedMenu, onMenuSelect, username, onLogout }: SidebarProps) {
+export function Sidebar({ username, onLogout }: SidebarProps) {
+  const location = useLocation();
+
   const menuItems = [
-    { id: 'main' as MenuType, label: '메인 대시보드', icon: LayoutDashboard },
-    { id: 'press' as MenuType, label: '프레스 머신', icon: Factory },
-    { id: 'engine' as MenuType, label: '엔진 조립', icon: Cpu },
-    { id: 'body' as MenuType, label: '차체 조립', icon: Box },
-    { id: 'paint' as MenuType, label: '도장 품질', icon: Droplet },
-    { id: 'facility' as MenuType, label: '설비', icon: Settings },
+    { path: '/', label: '메인 대시보드', icon: LayoutDashboard },
+    { path: '/press', label: '프레스 머신', icon: Factory },
+    { path: '/engine', label: '엔진 조립', icon: Cpu },
+    { path: '/body', label: '차체 조립', icon: Box },
+    { path: '/paint', label: '도장 품질', icon: Droplet },
+    { path: '/battery', label: '배터리 예지보전', icon: Battery },
+    { path: '/facility', label: '설비', icon: Settings },
+    { path: '/board', label: '게시판', icon: ClipboardList },
   ];
 
   return (
@@ -37,29 +39,28 @@ export function Sidebar({ selectedMenu, onMenuSelect, username, onLogout }: Side
           </div>
         </div>
       </div>
-      
+
       <nav className="flex-1 p-4">
         {menuItems.map((item) => {
           const Icon = item.icon;
-          const isSelected = selectedMenu === item.id;
-          
+          const isSelected = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
+
           return (
-            <button
-              key={item.id}
-              onClick={() => onMenuSelect(item.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg mb-2 transition-colors ${
-                isSelected
+            <Link
+              key={item.path}
+              to={item.path}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg mb-2 transition-colors ${isSelected
                   ? 'bg-blue-600 text-white'
                   : 'text-slate-300 hover:bg-slate-800'
-              }`}
+                }`}
             >
               <Icon className="w-5 h-5" />
               <span>{item.label}</span>
-            </button>
+            </Link>
           );
         })}
       </nav>
-      
+
       <div className="p-4 border-t border-slate-700">
         <button
           onClick={onLogout}
