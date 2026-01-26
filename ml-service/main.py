@@ -14,6 +14,8 @@ import battery
 import windshield
 import engine
 from paint import service as paint_service
+import body_assembly
+from body_assembly import service as body_service
 
 # ✅ welding_image는 "본래 welding-image FastAPI 계약"을 그대로 제공하는 모듈로 구성
 from welding_image.pipeline import full_pipeline
@@ -66,7 +68,7 @@ def startup_event():
         engine.load_engine_model()
         global PAINT_CFG
         PAINT_CFG = paint_service.load_paint_model(BASE_DIR)
-        
+        body_service.load_body_models(BASE_DIR)
         press.load_press_models()
 
         print("모델 로딩 완료")
@@ -93,6 +95,7 @@ def health():
         "engine_loaded": getattr(engine, "model", None) is not None,
         "paint_loaded": getattr(paint_service, "model", None) is not None,
         **press.get_press_status(),
+        **body_service.get_body_status(),
     }
 
 
@@ -247,6 +250,95 @@ async def predict_press_image():
     try:
         return await press.predict_press_image_sim()
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.post("/api/v1/smartfactory/body/inspect")
+async def body_inspect(
+    part: str = Form(...),
+    file: UploadFile = File(...),
+    conf: float = Form(0.25),
+):
+    try:
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="Filename is empty")
+
+        ext = os.path.splitext(file.filename)[1].lower()
+        if ext not in ALLOWED_EXT:
+            raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
+
+        # 원본 저장 (기존 temp 저장 방식 유지)
+        temp_path = os.path.join(TEMP_DIR, f"{uuid.uuid4()}{ext}")
+        contents = await file.read()
+        with open(temp_path, "wb") as f:
+            f.write(contents)
+
+        pred = body_service.predict_part(part.strip().lower(), contents, conf=float(conf))
+        out_path = body_service.save_annotated_image(pred["annotated_bgr"], BASE_DIR, filename_prefix=part)
+
+        return {
+            "part": pred["part"],
+            "pass_fail": pred["pass_fail"],
+            "detections": pred["detections"],
+            "original_image_url": to_public_url(temp_path),
+            "result_image_url": to_public_url(out_path),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/smartfactory/body/inspect/batch")
+async def body_inspect_batch(
+    door_file: UploadFile = File(None),
+    bumper_file: UploadFile = File(None),
+    headlamp_file: UploadFile = File(None),
+    taillamp_file: UploadFile = File(None),
+    radiator_file: UploadFile = File(None),
+    conf: float = Form(0.25),
+):
+    try:
+        mapping = {
+            "door": door_file,
+            "bumper": bumper_file,
+            "headlamp": headlamp_file,
+            "taillamp": taillamp_file,
+            "radiator": radiator_file,
+        }
+
+        results = {}
+        for part, uf in mapping.items():
+            if uf is None:
+                results[part] = None
+                continue
+
+            ext = os.path.splitext(uf.filename)[1].lower()
+            if ext not in ALLOWED_EXT:
+                results[part] = {"error": f"Unsupported file type: {ext}"}
+                continue
+
+            temp_path = os.path.join(TEMP_DIR, f"{uuid.uuid4()}{ext}")
+            contents = await uf.read()
+            with open(temp_path, "wb") as f:
+                f.write(contents)
+
+            pred = body_service.predict_part(part, contents, conf=float(conf))
+            out_path = body_service.save_annotated_image(pred["annotated_bgr"], BASE_DIR, filename_prefix=part)
+
+            results[part] = {
+                "part": pred["part"],
+                "pass_fail": pred["pass_fail"],
+                "detections": pred["detections"],
+                "original_image_url": to_public_url(temp_path),
+                "result_image_url": to_public_url(out_path),
+            }
+
+        return {"results": results}
+
+    except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
     
 if __name__ == "__main__":
