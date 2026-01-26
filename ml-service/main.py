@@ -264,6 +264,26 @@ async def predict_paint_endpoint(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
+@app.post("/api/v1/smartfactory/paint/auto")
+def predict_paint_auto():
+    try:
+        if PAINT_CFG is None:
+            raise HTTPException(status_code=500, detail="paint config not initialized")
+
+        result = paint_service.predict_paint_defect_auto(
+            base_dir=BASE_DIR,
+            save_image_dir=PAINT_CFG["SAVE_IMAGE_DIR"],
+            save_label_dir=PAINT_CFG["SAVE_LABEL_DIR"],
+            save_result_dir=PAINT_CFG["SAVE_RESULT_DIR"],
+            backend_url="http://localhost:3001/api/paint-analysis",
+        )
+        return JSONResponse(status_code=200, content=result)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
 # =========================
 # PRESS APIs (SIM INPUT)
 # =========================

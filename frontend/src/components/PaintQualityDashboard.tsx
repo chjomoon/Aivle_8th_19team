@@ -1,29 +1,14 @@
 // src/components/PaintQualityDashboard.tsx
-import React, { useMemo, useRef, useState } from "react";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Image as ImageIcon,
-  Loader2,
-  Target,
-  Timer,
-} from "lucide-react";
-import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, CheckCircle2, Target, Timer } from "lucide-react";
 
 type Severity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
 type DetectedDefect = {
-  defectClass: string; // EN key e.g. orange_peel
-  defectNameKo: string; // KO e.g. 오렌지 필
-  defectNameEn?: string; // optional
-  confidence: number; // percent (0~100)
+  defectClass: string;
+  defectNameKo: string;
+  defectNameEn?: string;
+  confidence: number; // percent
   bboxX1: number;
   bboxY1: number;
   bboxX2: number;
@@ -38,48 +23,53 @@ type PaintApiResponse = {
   data: {
     result_id: string;
     img_id: string;
-    img_name: string;
-    img_path: string; // /static/...
-    img_result: string; // /static/...
-    defect_type: number; // -1 or class id
-    defect_score: number; // 0~1 (server)
+    img_name: string | null;
+    img_path: string | null; // /static/...
+    img_result: string | null; // /static/...
+    defect_type: number;
+    defect_score: number; // 0~1
     label_name: string | null;
     label_path: string | null;
-    label_name_text: string | null; // EN name or "없음"
-    label_name_ko?: string | null; // KO name
+    label_name_text: string | null;
+    label_name_ko?: string | null;
     inference_time_ms: number;
     detected_defects?: DetectedDefect[];
   };
+  source?: string | null;
+  sequence?: { index_next: number; count: number };
+  auto_note?: string | null;
 };
 
 type HistoryItem = {
   resultId: string;
-  analyzedAt: string; // ISO string
+  analyzedAt: string;
   status: "PASS" | "FAIL";
   primaryDefectTypeKo: string | null;
-  confidence: number; // 0~100
+  confidence: number;
   inferenceTimeMs: number;
-  originalImageUrl: string; // /static/...
-  resultImageUrl: string; // /static/...
+  originalImageUrl: string;
+  resultImageUrl: string;
   defects: DetectedDefect[];
+  source?: string | null;
 };
 
 const API_BASE = "http://localhost:8000";
+const AUTO_ENDPOINT = `${API_BASE}/api/v1/smartfactory/paint/auto`;
 
 function classNames(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
 }
 
-function getColorForDefectKo(name: string) {
-  const map: Record<string, string> = {
-    정상: "#10b981",
-    "오렌지 필": "#ef4444",
-    흘러내림: "#f97316",
-    "솔벤트 팝": "#eab308",
-    물자국: "#6366f1",
-    기타: "#64748b",
-  };
-  return map[name] || "#64748b";
+function safePercent(n: any, fallback = 0) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return fallback;
+  return v;
+}
+
+function normalizeUrl(path: string | null | undefined) {
+  if (!path) return "";
+  if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  return `${API_BASE}${path}`;
 }
 
 function statusPill(status: "PASS" | "FAIL") {
@@ -99,36 +89,18 @@ function severityColor(sev: Severity) {
   return "text-blue-600";
 }
 
-function safePercent(n: any, fallback = 0) {
-  const v = Number(n);
-  if (!Number.isFinite(v)) return fallback;
-  return v;
-}
-
-function normalizeUrl(path: string | null | undefined) {
-  if (!path) return "";
-  // server returns /static/...
-  if (path.startsWith("http://") || path.startsWith("https://")) return path;
-  return `${API_BASE}${path}`;
-}
-
 export const PaintQualityDashboard: React.FC = () => {
-  const fileRef = useRef<HTMLInputElement | null>(null);
+  const firstRunRef = useRef(true);
 
-  const [uploading, setUploading] = useState(false);
   const [current, setCurrent] = useState<HistoryItem | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [autoInfo, setAutoInfo] = useState<string>("");
 
   const stats = useMemo(() => {
     const total = history.length;
     const pass = history.filter((h) => h.status === "PASS").length;
     const fail = total - pass;
-
-    const defectSum = history.reduce(
-      (acc, h) => acc + (h.defects?.length || 0),
-      0
-    );
 
     const avgConf =
       total === 0
@@ -147,7 +119,6 @@ export const PaintQualityDashboard: React.FC = () => {
       total,
       pass,
       fail,
-      defectSum,
       avgConf,
       avgLatency,
       passRate,
@@ -155,51 +126,19 @@ export const PaintQualityDashboard: React.FC = () => {
     };
   }, [history]);
 
-  // 검사 건수 기준 분포 (PASS=정상 1건, FAIL=대표 결함 1건)
-  const defectRatio = useMemo(() => {
-    if (history.length === 0) return [];
-
-    const map: Record<string, number> = {};
-    for (const h of history) {
-      if (h.status === "PASS") {
-        map["정상"] = (map["정상"] || 0) + 1;
-      } else {
-        const key = h.primaryDefectTypeKo || "기타";
-        map[key] = (map[key] || 0) + 1;
-      }
-    }
-
-    return Object.entries(map).map(([name, value]) => ({
-      name,
-      value,
-      fill: getColorForDefectKo(name),
-      percentage: ((value / history.length) * 100).toFixed(1),
-    }));
-  }, [history]);
-
-  const onPickFile = () => fileRef.current?.click();
-
-  const buildHistoryItem = (json: PaintApiResponse, fileNameFallback?: string) => {
+  const buildHistoryItem = (json: PaintApiResponse, analyzedAtISO?: string) => {
     const defects = json.data.detected_defects || [];
     const status: "PASS" | "FAIL" = defects.length === 0 ? "PASS" : "FAIL";
 
-    // 대표 결함(KO):
-    // 1) detected_defects[0].defectNameKo
-    // 2) server data.label_name_ko
-    // 3) 없으면 기타
     const primaryKo =
       status === "PASS"
-        ? null
+        ? "정상"
         : defects[0]?.defectNameKo ??
           json.data.label_name_ko ??
           (json.data.label_name_text && json.data.label_name_text !== "없음"
             ? "기타"
             : "기타");
 
-    // confidence:
-    // - PASS: server가 100 주지만 안전하게 100 고정
-    // - FAIL: detected_defects[0].confidence (percent)
-    // - fallback: defect_score(0~1) -> percent
     const conf =
       status === "PASS"
         ? 100
@@ -208,15 +147,12 @@ export const PaintQualityDashboard: React.FC = () => {
             Math.round(safePercent(json.data.defect_score, 0) * 100)
           );
 
-    // 이미지 URL:
-    // 서버가 원본 삭제할 수도 있고, 결과 이미지는 저장되는 위치가 다를 수 있음
-    // img_result 우선, 없으면 img_path
     const originalUrl = json.data.img_path || "";
     const resultUrl = json.data.img_result || json.data.img_path || "";
 
-    const item: HistoryItem = {
-      resultId: json.data.result_id,
-      analyzedAt: new Date().toISOString(),
+    return {
+      resultId: json.data.result_id || `unknown_${Date.now()}`,
+      analyzedAt: analyzedAtISO || new Date().toISOString(),
       status,
       primaryDefectTypeKo: primaryKo,
       confidence: conf,
@@ -224,50 +160,63 @@ export const PaintQualityDashboard: React.FC = () => {
       originalImageUrl: originalUrl,
       resultImageUrl: resultUrl,
       defects,
-    };
-
-    // 혹시 result_id가 비었을 경우 대비 (거의 없음)
-    if (!item.resultId) {
-      item.resultId = `unknown_${Date.now()}_${fileNameFallback || "file"}`;
-    }
-
-    return item;
+      source: json.source ?? null,
+    } as HistoryItem;
   };
 
-  const onUpload = async (file: File) => {
-    setError(null);
-    setUploading(true);
+  const pushHistory = (item: HistoryItem) => {
+    setCurrent(item);
+    setHistory((prev) => {
+      if (prev.length > 0 && prev[0].resultId === item.resultId) {
+        const copy = [...prev];
+        copy[0] = item;
+        return copy;
+      }
+      return [item, ...prev].slice(0, 50);
+    });
+  };
 
+  const fetchAutoOnce = async () => {
     try {
-      const form = new FormData();
-      form.append("file", file);
-
-      const res = await fetch(`${API_BASE}/api/v1/smartfactory/paint`, {
-        method: "POST",
-        body: form,
-      });
-
+      const res = await fetch(AUTO_ENDPOINT, { method: "POST" });
       if (!res.ok) {
         const text = await res.text().catch(() => "");
-        throw new Error(`API error ${res.status}: ${text || res.statusText}`);
+        throw new Error(`AUTO API error ${res.status}: ${text || res.statusText}`);
       }
 
       const json = (await res.json()) as PaintApiResponse;
+      if (!json?.data) throw new Error("AUTO 응답 형식이 올바르지 않습니다. (data 없음)");
 
-      if (!json?.data) {
-        throw new Error("API 응답 형식이 올바르지 않습니다. (data 없음)");
-      }
+      // 성공하면 에러 제거
+      setError(null);
 
-      const item = buildHistoryItem(json, file.name);
+      const info =
+        json.auto_note ??
+        (json.source
+          ? `source: ${json.source} (${json.sequence?.index_next ?? 0}/${json.sequence?.count ?? 0})`
+          : "");
+      setAutoInfo(info);
 
-      setCurrent(item);
-      setHistory((prev) => [item, ...prev].slice(0, 50));
+      const item = buildHistoryItem(json, new Date().toISOString());
+      pushHistory(item);
     } catch (e: any) {
-      setError(e?.message || "업로드/분석 중 오류가 발생했습니다.");
-    } finally {
-      setUploading(false);
+      setError(e?.message || "AUTO 분석 중 오류가 발생했습니다.");
     }
   };
+
+  useEffect(() => {
+    if (firstRunRef.current) {
+      firstRunRef.current = false;
+      fetchAutoOnce();
+    }
+
+    const id = window.setInterval(() => {
+      fetchAutoOnce();
+    }, 5000);
+
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const MetricCard = ({
     title,
@@ -311,9 +260,6 @@ export const PaintQualityDashboard: React.FC = () => {
       return (
         <div className="text-xs text-slate-400 py-10 text-center">
           결과 이미지를 불러올 수 없습니다.
-          <div className="mt-1 text-[11px]">
-            (서버에서 원본 삭제/경로 변경 가능)
-          </div>
         </div>
       );
     }
@@ -323,7 +269,7 @@ export const PaintQualityDashboard: React.FC = () => {
         src={full}
         alt="분석 결과"
         onError={() => setBroken(true)}
-        className="w-full max-h-[360px] object-contain rounded"
+        className="w-full max-h-[420px] object-contain rounded"
       />
     );
   };
@@ -334,8 +280,9 @@ export const PaintQualityDashboard: React.FC = () => {
       <div className="mb-2">
         <h2 className="text-3xl font-bold text-gray-900">도장 품질 관리</h2>
         <p className="text-gray-600 mt-1">
-          FastAPI 도장 모델(<span className="font-mono">/api/v1/smartfactory/paint</span>) 기반 분석
+          AUTO(5초): <span className="font-mono">/api/v1/smartfactory/paint/auto</span>
         </p>
+        {autoInfo && <div className="mt-1 text-[11px] text-slate-500">{autoInfo}</div>}
       </div>
 
       {/* Metrics */}
@@ -370,133 +317,59 @@ export const PaintQualityDashboard: React.FC = () => {
         />
       </div>
 
-      {/* Uploader + Chart */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-[260px]">
-        {/* Uploader */}
-        <div className="rounded-lg border p-4 bg-white">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <div className="text-sm font-semibold text-slate-900">이미지 등록</div>
-              <div className="text-xs text-slate-500">
-                JPG/PNG/WebP 업로드 후 즉시 분석합니다.
-              </div>
-            </div>
-
-            <button
-              onClick={onPickFile}
-              disabled={uploading}
-              className={classNames(
-                "inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border",
-                uploading
-                  ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
-                  : "bg-slate-900 text-white border-slate-900 hover:bg-black"
-              )}
-            >
-              {uploading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  분석 중
-                </>
-              ) : (
-                <>
-                  <ImageIcon className="w-4 h-4" />
-                  업로드
-                </>
-              )}
-            </button>
-
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) onUpload(f);
-                e.currentTarget.value = "";
-              }}
-            />
-          </div>
-
-          {error && (
-            <div className="rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-              {error}
-            </div>
-          )}
-
-          <div className="mt-3 text-xs text-slate-500">
-            백엔드: <span className="font-mono">{API_BASE}</span>
-          </div>
+      {error && (
+        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+          {error}
         </div>
+      )}
 
-        {/* Defect Ratio Chart */}
+      {/* 상단: 왼쪽 이미지 / 오른쪽 결과 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Left: Image */}
         <div className="rounded-lg border p-4 bg-white">
-          <div className="text-sm font-semibold text-slate-900 mb-1">결함 분포</div>
-          <div className="text-xs text-slate-500 mb-3">
-            검사 건수 기준 (PASS=정상 1건, FAIL=대표 결함 1건)
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-sm font-semibold text-slate-900">결과 이미지</div>
+            {current?.source && (
+              <span className="text-[11px] px-2 py-1 rounded border bg-slate-50 text-slate-600">
+                source: {current.source}
+              </span>
+            )}
           </div>
 
-          {defectRatio.length === 0 ? (
-            <div className="text-xs text-slate-400 py-10 text-center">
-              아직 분석 기록이 없습니다.
-            </div>
-          ) : (
-            <div className="h-[210px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={defectRatio}
-                    dataKey="value"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={70}
-                    labelLine={false}
-                    label={(entry: any) => `${entry.percentage}%`}
-                  >
-                    {defectRatio.map((entry, idx) => (
-                      <Cell key={idx} fill={entry.fill} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(v: any) => `${v}건`} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                </PieChart>
-              </ResponsiveContainer>
+          <div className="rounded-md border bg-slate-50 p-2">
+            <CurrentImage url={current?.resultImageUrl || ""} />
+          </div>
+
+          {current?.resultImageUrl && (
+            <div className="mt-2 text-[11px] text-slate-500 break-all">
+              {current.resultImageUrl}
             </div>
           )}
         </div>
-      </div>
 
-      {/* Current Result */}
-      {current && (
+        {/* Right: Result */}
         <div className="rounded-lg border p-4 bg-white">
           <div className="flex items-center justify-between mb-3">
             <div className="text-sm font-semibold text-slate-900">현재 분석 결과</div>
-            <span
-              className={classNames(
-                "px-2 py-1 text-xs font-semibold rounded border",
-                statusPill(current.status)
-              )}
-            >
-              {statusText(current.status)}
-            </span>
+            {current && (
+              <span
+                className={classNames(
+                  "px-2 py-1 text-xs font-semibold rounded border",
+                  statusPill(current.status)
+                )}
+              >
+                {statusText(current.status)}
+              </span>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Image */}
-            <div className="space-y-2">
-              <div className="text-xs font-medium text-slate-600">분석 이미지</div>
-              <div className="rounded-md border bg-slate-50 p-2">
-                <CurrentImage url={current.resultImageUrl} />
-              </div>
-
-              {/* 원본 링크도 같이 보여주면 디버깅 쉬움 */}
-              <div className="text-[11px] text-slate-500 break-all">
-                결과: <span className="font-mono">{current.resultImageUrl}</span>
-              </div>
+          {!current ? (
+            <div className="text-xs text-slate-500 py-10 text-center">
+              AUTO 분석 대기 중...
             </div>
-
-            {/* Meta + Defects */}
+          ) : (
             <div className="space-y-3">
+              {/* 검사 정보 */}
               <div className="rounded-md border p-3">
                 <div className="text-xs font-semibold mb-2">검사 정보</div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
@@ -514,6 +387,7 @@ export const PaintQualityDashboard: React.FC = () => {
                         day: "2-digit",
                         hour: "2-digit",
                         minute: "2-digit",
+                        second: "2-digit",
                       })}
                     </div>
                   </div>
@@ -544,7 +418,8 @@ export const PaintQualityDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {current.defects.length > 0 && (
+              {/* 검출 결함 */}
+              {current.defects.length > 0 ? (
                 <div className="rounded-md border p-3">
                   <div className="text-xs font-semibold mb-2">검출 결함</div>
                   <div className="space-y-2">
@@ -566,9 +441,7 @@ export const PaintQualityDashboard: React.FC = () => {
                           <div className="font-semibold text-slate-800">
                             {safePercent(d.confidence, 0).toFixed(0)}%
                           </div>
-                          <div
-                            className={classNames("font-semibold", severityColor(d.severityLevel))}
-                          >
+                          <div className={classNames("font-semibold", severityColor(d.severityLevel))}>
                             {d.severityLevel}
                           </div>
                         </div>
@@ -576,17 +449,15 @@ export const PaintQualityDashboard: React.FC = () => {
                     ))}
                   </div>
                 </div>
-              )}
-
-              {current.defects.length === 0 && (
+              ) : (
                 <div className="rounded-md border border-green-200 bg-green-50 p-3 text-xs text-green-700">
                   결함이 검출되지 않았습니다.
                 </div>
               )}
             </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* History */}
       <div className="rounded-lg border p-4 bg-white">
@@ -597,6 +468,7 @@ export const PaintQualityDashboard: React.FC = () => {
               onClick={() => {
                 setHistory([]);
                 setCurrent(null);
+                setError(null);
               }}
               className="text-xs px-2 py-1 rounded border bg-white hover:bg-slate-50"
             >
@@ -614,12 +486,13 @@ export const PaintQualityDashboard: React.FC = () => {
                 <th className="text-left p-2 font-semibold">대표 결함</th>
                 <th className="text-left p-2 font-semibold">신뢰도</th>
                 <th className="text-left p-2 font-semibold">처리시간</th>
+                <th className="text-left p-2 font-semibold">source</th>
               </tr>
             </thead>
             <tbody>
               {history.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center p-8 text-slate-400">
+                  <td colSpan={6} className="text-center p-8 text-slate-400">
                     분석 이력이 없습니다.
                   </td>
                 </tr>
@@ -654,6 +527,7 @@ export const PaintQualityDashboard: React.FC = () => {
                       {safePercent(h.confidence, 0).toFixed(0)}%
                     </td>
                     <td className="p-2">{h.inferenceTimeMs}ms</td>
+                    <td className="p-2 text-[11px] text-slate-600">{h.source || "-"}</td>
                   </tr>
                 ))
               )}
@@ -662,7 +536,7 @@ export const PaintQualityDashboard: React.FC = () => {
         </div>
 
         <div className="mt-2 text-[11px] text-slate-500">
-          * 이력/통계는 현재 페이지 상태에만 저장됩니다(새로고침 시 초기화).
+          * AUTO는 5초 주기로 자동 실행됩니다.
         </div>
       </div>
     </div>
