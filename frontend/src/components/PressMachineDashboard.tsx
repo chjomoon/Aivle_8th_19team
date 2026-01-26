@@ -329,17 +329,6 @@ export function PressMachineDashboard() {
                   <ImageIcon className="w-4 h-4 text-blue-600" />
                   이미지 결함 검출 (CNN)
                 </h3>
-
-                <button
-                  onClick={fetchPressImage}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-black/5 border border-black/15 text-black transition-colors disabled:opacity-60"
-                  disabled={isImageLoading}
-                >
-                  <RefreshCw
-                    className={cn("w-4 h-4", isImageLoading && "animate-spin")}
-                  />
-                  새 이미지
-                </button>
               </div>
 
               <div className="px-6 pb-6">

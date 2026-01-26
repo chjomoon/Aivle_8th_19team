@@ -231,7 +231,7 @@ export function WeldingImageDashboard() {
       <div className="mb-6 flex justify-between items-start">
         <div>
           <div className="text-3xl font-extrabold text-gray-900">
-            용접 이미지 검사 (자동)
+            용접 이미지 검사
           </div>
           <div className="text-xs text-gray-500 mt-1">
             Last update: <span className="font-mono">{lastUpdated}</span>
@@ -242,17 +242,6 @@ export function WeldingImageDashboard() {
         </div>
 
         <div className="flex gap-2">
-          <button
-            onClick={fetchAuto}
-            className="px-5 py-3 rounded-xl font-bold text-black bg-yellow-300 hover:bg-yellow-400 shadow inline-flex items-center gap-2 disabled:opacity-60"
-            disabled={loading}
-          >
-            <span className="w-7 h-7 bg-yellow-400 rounded-md flex items-center justify-center">
-              <Search className="w-4 h-4 text-black" />
-            </span>
-            즉시 분석
-          </button>
-
           <button
             onClick={resetAll}
             className="px-5 py-3 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 shadow inline-flex items-center gap-2"
