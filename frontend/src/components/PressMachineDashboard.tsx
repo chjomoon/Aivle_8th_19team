@@ -17,7 +17,6 @@ import {
   CheckCircle2,
   Factory,
   Image as ImageIcon,
-  RefreshCw,
   RotateCcw,
 } from "lucide-react";
 
@@ -55,7 +54,7 @@ const DEFECT_TYPES = [
 const API_BASE = "http://localhost:8000";
 const DEMO_RANDOM_ON_SAME_VALUE = false;
 
-// ✅ 폴링 주기(여기만 바꾸면 됨)
+// ✅ 폴링 주기
 const POLL_IMAGE_MS = 5000; // 이미지 예측 요청 주기
 const POLL_VIB_MS = 2000; // 진동 예측 요청 주기
 
@@ -93,7 +92,7 @@ export function PressMachineDashboard() {
   >([]);
   const [lastUpdated, setLastUpdated] = useState<string>("--:--:--");
 
-  // ✅ 중복 요청(겹침) 방지용
+  // ✅ 중복 요청 방지용
   const imageInFlightRef = useRef(false);
   const vibInFlightRef = useRef(false);
 
@@ -105,13 +104,12 @@ export function PressMachineDashboard() {
     const isAnomaly = !!vibration?.is_anomaly;
     return {
       label: isAnomaly ? "ANOMALY" : "NORMAL",
-      wrap: isAnomaly
-        ? "bg-red-50 border-red-200 text-black"
-        : "bg-emerald-50 border-emerald-200 text-black",
+      wrap: isAnomaly ? "bg-red-50 border-red-100" : "bg-green-50 border-green-100",
+      dot: isAnomaly ? "bg-red-500 animate-pulse" : "bg-green-500",
       icon: isAnomaly ? (
-        <AlertTriangle className="w-4 h-4 text-red-600" />
+        <AlertTriangle className="w-5 h-5 text-red-600" />
       ) : (
-        <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+        <CheckCircle2 className="w-5 h-5 text-green-600" />
       ),
     };
   }, [vibration?.is_anomaly]);
@@ -135,7 +133,6 @@ export function PressMachineDashboard() {
   // ✅ Auto Image Predict (폴링)
   // ---------------------------
   const fetchPressImage = async () => {
-    // ✅ 폴링 겹침 방지
     if (imageInFlightRef.current) return;
     imageInFlightRef.current = true;
 
@@ -153,7 +150,7 @@ export function PressMachineDashboard() {
       const data = (await res.json()) as DefectData;
       setAutoImage(data);
 
-      // ✅ 분포 누적: all_scores 확률을 누적
+      // ✅ 분포 누적
       setDefectAccum((prev) => {
         const next = { ...prev };
         for (const k of DEFECT_TYPES) {
@@ -173,7 +170,6 @@ export function PressMachineDashboard() {
     }
   };
 
-  // ✅ 이미지 자동 폴링 (의존성 [] 고정)
   useEffect(() => {
     let mounted = true;
 
@@ -182,7 +178,7 @@ export function PressMachineDashboard() {
       await fetchPressImage();
     };
 
-    tick(); // 최초 1회
+    tick();
     const t = window.setInterval(tick, POLL_IMAGE_MS);
 
     return () => {
@@ -199,15 +195,13 @@ export function PressMachineDashboard() {
     let mounted = true;
 
     const fetchVibrationData = async () => {
-      // ✅ 폴링 겹침 방지
       if (vibInFlightRef.current) return;
       vibInFlightRef.current = true;
 
       try {
-        const response = await fetch(
-          `${API_BASE}/api/v1/smartfactory/press/vibration`,
-          { method: "POST" }
-        );
+        const response = await fetch(`${API_BASE}/api/v1/smartfactory/press/vibration`, {
+          method: "POST",
+        });
 
         if (!response.ok) {
           const t = await response.text().catch(() => "");
@@ -220,22 +214,16 @@ export function PressMachineDashboard() {
         if (!mounted) return;
 
         const sv = data.sensor_values || {};
-        let s0 =
-          typeof (sv as any).sensor_0 === "number" ? (sv as any).sensor_0 : 0;
-        let s1 =
-          typeof (sv as any).sensor_1 === "number" ? (sv as any).sensor_1 : 0;
-        let s2 =
-          typeof (sv as any).sensor_2 === "number" ? (sv as any).sensor_2 : 0;
+        let s0 = typeof (sv as any).sensor_0 === "number" ? (sv as any).sensor_0 : 0;
+        let s1 = typeof (sv as any).sensor_1 === "number" ? (sv as any).sensor_1 : 0;
+        let s2 = typeof (sv as any).sensor_2 === "number" ? (sv as any).sensor_2 : 0;
 
         let err =
-          typeof data.reconstruction_error === "number"
-            ? data.reconstruction_error
-            : 0;
+          typeof data.reconstruction_error === "number" ? data.reconstruction_error : 0;
 
         if (DEMO_RANDOM_ON_SAME_VALUE) {
           const prev = prevRef.current;
-          const same =
-            prev.err === err && prev.s0 === s0 && prev.s1 === s1 && prev.s2 === s2;
+          const same = prev.err === err && prev.s0 === s0 && prev.s1 === s1 && prev.s2 === s2;
           if (same) {
             const jitter = () => (Math.random() - 0.5) * 0.02;
             err = err + jitter();
@@ -249,14 +237,9 @@ export function PressMachineDashboard() {
         setVibration(data);
         setLastUpdated(timeStr);
 
-        setVibrationHistory((prev) =>
-          [...prev, { time: timeStr, value: err }].slice(-30)
-        );
-
+        setVibrationHistory((prev) => [...prev, { time: timeStr, value: err }].slice(-30));
         setSensorHistory((prev) =>
-          [...prev, { time: timeStr, sensor_0: s0, sensor_1: s1, sensor_2: s2 }].slice(
-            -30
-          )
+          [...prev, { time: timeStr, sensor_0: s0, sensor_1: s1, sensor_2: s2 }].slice(-30)
         );
       } catch (error) {
         console.error("Failed to fetch vibration data:", error);
@@ -265,7 +248,7 @@ export function PressMachineDashboard() {
       }
     };
 
-    fetchVibrationData(); // 최초 1회
+    fetchVibrationData();
     const interval = window.setInterval(fetchVibrationData, POLL_VIB_MS);
 
     return () => {
@@ -274,359 +257,373 @@ export function PressMachineDashboard() {
     };
   }, []);
 
+  // ---------------------------
+  // ✅ KPI (배터리/차체 스타일 톤)
+  // ---------------------------
+  const kpi = useMemo(() => {
+    const pred = autoImage?.predicted_class ?? "-";
+    const conf = typeof autoImage?.confidence === "number" ? autoImage.confidence : null;
+    const err = vibration?.reconstruction_error ?? null;
+    const th = vibration?.threshold ?? null;
+
+    return {
+      predicted: pred,
+      confidencePct: conf === null ? "-" : `${(conf * 100).toFixed(1)}%`,
+      vibStatus: vibration ? (vibration.is_anomaly ? "ANOMALY" : "NORMAL") : "WAITING",
+      err: err === null ? "-" : err.toFixed(4),
+      th: th === null ? "-" : th.toFixed(4),
+    };
+  }, [autoImage, vibration]);
+
   return (
-    <div className="min-h-screen bg-white text-black">
-      <div className="p-8">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8 border-b border-black/10 pb-5">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-blue-600 rounded-2xl shadow-lg shadow-blue-500/20">
+    <div className="p-8 bg-gradient-to-br from-gray-50 to-blue-50 min-h-screen">
+      {/* Header (Battery 스타일) */}
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center">
               <Factory className="w-7 h-7 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-black">
-                AI 결함 검출 대시보드
-              </h1>
-              <p className="text-black text-sm mt-1">
-                프레스 공정 자동 예측(이미지) + 실시간 모니터링(진동)
-              </p>
-              <p className="text-xs text-black/60 mt-1">
+              <h2 className="text-3xl font-bold text-gray-900">프레스 공정 모니터링</h2>
+              <p className="text-gray-600 mt-1">이미지 결함 검출(CNN) + 진동 이상 감지(LSTM)</p>
+              <p className="text-xs text-gray-500 mt-1">
                 Polling: image {POLL_IMAGE_MS / 1000}s · vibration {POLL_VIB_MS / 1000}s
               </p>
             </div>
           </div>
+        </div>
 
-          <div className="flex items-center gap-3 text-sm">
-            <div className="flex items-center gap-2 text-black">
-              <div
-                className={cn(
-                  "w-2 h-2 rounded-full",
-                  vibration?.is_anomaly ? "bg-red-500 animate-pulse" : "bg-emerald-500"
-                )}
-              />
-              <span className="text-black">
-                진동 센서: {vibration ? "정상 수신 중" : "연결 대기"}
+        <div className="flex gap-3 items-center">
+          <div className="px-4 py-2 rounded-xl bg-white border border-gray-200 text-sm text-gray-700 shadow-sm">
+            Vibration update: <span className="font-mono">{lastUpdated}</span>
+          </div>
+          <div className="px-4 py-2 rounded-xl bg-white border border-gray-200 text-sm text-gray-700 shadow-sm">
+            Image update: <span className="font-mono">{imageLastUpdated}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* KPI Cards (Battery 스타일) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200">
+          <div className="flex items-center gap-2 mb-4">
+            <ImageIcon className="w-5 h-5 text-blue-600" />
+            <p className="text-sm font-medium text-gray-600">Latest Class</p>
+          </div>
+          <p className="text-3xl font-bold text-gray-900 mb-2">{kpi.predicted}</p>
+          <p className="text-xs text-blue-600 font-medium">최근 이미지 예측 결과</p>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200">
+          <div className="flex items-center gap-2 mb-4">
+            <CheckCircle2 className="w-5 h-5 text-green-600" />
+            <p className="text-sm font-medium text-gray-600">Confidence</p>
+          </div>
+          <p className="text-3xl font-bold text-gray-900 mb-2">{kpi.confidencePct}</p>
+          <p className="text-xs text-green-600 font-medium">모델 확신도(표시용)</p>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
+              <p className="text-sm font-medium text-gray-600">Vibration Status</p>
+            </div>
+            <div className={cn("w-2 h-2 rounded-full", statusBadge.dot)} />
+          </div>
+          <p className={cn("text-3xl font-bold mb-2", vibration?.is_anomaly ? "text-red-600" : "text-gray-900")}>
+            {kpi.vibStatus}
+          </p>
+          <p className="text-xs text-red-600 font-medium">실시간 진동 상태</p>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200">
+          <div className="flex items-center gap-2 mb-4">
+            <Activity className="w-5 h-5 text-purple-600" />
+            <p className="text-sm font-medium text-gray-600">Reconstruction Error</p>
+          </div>
+          <p className="text-3xl font-bold text-gray-900 mb-2">{kpi.err}</p>
+          <p className="text-xs text-purple-600 font-medium">threshold: {kpi.th}</p>
+        </div>
+      </div>
+
+      {/* Main Grid (구성 동일) */}
+      <div className="grid grid-cols-12 gap-6">
+        {/* Left: Image + Result */}
+        <div className="col-span-12 lg:col-span-6 space-y-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                <h3 className="text-lg font-bold text-gray-900">이미지 결함 검출 (CNN)</h3>
+              </div>
+              <span className="text-[10px] font-bold px-3 py-1 rounded-full bg-gray-900 text-white">
+                Auto
               </span>
             </div>
 
-            <div className="px-3 py-2 rounded-xl bg-white border border-black/15 text-black">
-              Vibration update: <span className="font-mono">{lastUpdated}</span>
-            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Image */}
+                <div className="bg-white rounded-2xl border border-gray-200 p-3">
+                  <div className="text-[11px] text-gray-500 mb-2 flex items-center justify-between">
+                    <span>입력 이미지</span>
+                    <span className="font-mono">{isImageLoading ? "loading..." : imageLastUpdated}</span>
+                  </div>
 
-            <div className="px-3 py-2 rounded-xl bg-white border border-black/15 text-black">
-              Image update: <span className="font-mono">{imageLastUpdated}</span>
+                  <div className="rounded-xl border border-gray-200 overflow-hidden bg-gray-50">
+                    <div className="aspect-[16/9] w-full bg-black">
+                      {autoImage?.image_base64 ? (
+                        <img
+                          src={`data:image/jpeg;base64,${autoImage.image_base64}`}
+                          alt="Auto"
+                          className="w-full h-full object-contain object-center"
+                        />
+                      ) : (
+                        <div className="w-full h-full grid place-items-center text-white/70 text-sm px-4 text-center">
+                          이미지 없음
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {autoImage?.note ? (
+                    <div className="mt-2 text-xs text-gray-500">{autoImage.note}</div>
+                  ) : null}
+                </div>
+
+                {/* Result */}
+                <div className="space-y-4">
+                  <div className="bg-white rounded-2xl border border-gray-200 p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs text-gray-500">예측 결과</p>
+                        <p className="text-2xl font-extrabold text-gray-900 mt-1">
+                          {autoImage?.predicted_class ?? "-"}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <p className="text-xs text-gray-500">Confidence</p>
+                        <p
+                          className={cn(
+                            "text-2xl font-extrabold mt-1",
+                            (autoImage?.confidence ?? 0) >= 0.8 ? "text-green-700" : "text-amber-700"
+                          )}
+                        >
+                          {typeof autoImage?.confidence === "number"
+                            ? `${(autoImage.confidence * 100).toFixed(1)}%`
+                            : "-"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-2xl border border-gray-200 p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-sm font-bold text-gray-900">전체 결함 확률</h4>
+                      <span className="text-[10px] font-bold px-3 py-1 rounded-full bg-gray-900 text-white">
+                        scores
+                      </span>
+                    </div>
+
+                    <div className="space-y-2">
+                      {Object.entries(autoImage?.all_scores || {}).map(([className, score]) => (
+                        <div key={className} className="flex items-center justify-between gap-3">
+                          <span className="text-xs text-gray-700 w-32 truncate">{className}</span>
+
+                          <div className="flex items-center gap-3 flex-1">
+                            <div className="h-2 rounded-full bg-gray-200 overflow-hidden flex-1">
+                              <div
+                                className="h-full bg-blue-600"
+                                style={{ width: `${(score || 0) * 100}%` }}
+                              />
+                            </div>
+                            <span className="text-xs font-mono text-gray-800 w-14 text-right">
+                              {((score || 0) * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+
+                      {!autoImage && (
+                        <div className="text-sm text-gray-500">데이터 수신 대기 중...</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Main Grid */}
-        <div className="grid grid-cols-12 gap-6">
-          {/* ✅ Image + Result */}
-          <div className="col-span-12 lg:col-span-6 space-y-6">
-            <div className="rounded-2xl border border-black/10 bg-white shadow-sm">
-              <div className="px-6 pt-6 pb-4 flex items-center justify-between">
-                <h3 className="font-semibold flex items-center gap-2 text-black">
-                  <ImageIcon className="w-4 h-4 text-blue-600" />
-                  이미지 결함 검출 (CNN)
-                </h3>
+        {/* Right: Vibration */}
+        <div className="col-span-12 lg:col-span-6 space-y-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-purple-500 rounded-full" />
+                <h3 className="text-lg font-bold text-gray-900">진동 이상 감지 (LSTM)</h3>
               </div>
-
-              <div className="px-6 pb-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Left: Image */}
-                  <div>
-                    <div className="rounded-2xl overflow-hidden border border-black/10 bg-white">
-                      <div className="bg-black/90 p-3 rounded-2xl">
-                        {autoImage?.image_base64 ? (
-                          <img
-                            src={`data:image/jpeg;base64,${autoImage.image_base64}`}
-                            alt="Auto"
-                            className="w-full h-64 object-contain rounded-xl bg-black"
-                          />
-                        ) : (
-                          <div className="h-64 flex items-center justify-center text-white/70 text-sm px-4 text-center">
-                            이미지 없음
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    
-                    {autoImage?.note ? (
-                      <div className="mt-1 text-xs text-black/50">{autoImage.note}</div>
-                    ) : null}
-                  </div>
-
-                  {/* Right: Result */}
-                  <div className="space-y-4">
-                    <div className="rounded-2xl border border-black/10 bg-white p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-xs text-black/70">예측 결과</p>
-                          <p className="text-2xl font-extrabold text-black mt-1">
-                            {autoImage?.predicted_class ?? "-"}
-                          </p>
-                        </div>
-
-                        <div className="text-right">
-                          <p className="text-xs text-black/70">Confidence</p>
-                          <p
-                            className={cn(
-                              "text-2xl font-extrabold mt-1",
-                              (autoImage?.confidence ?? 0) >= 0.8
-                                ? "text-emerald-700"
-                                : "text-amber-700"
-                            )}
-                          >
-                            {typeof autoImage?.confidence === "number"
-                              ? `${(autoImage.confidence * 100).toFixed(1)}%`
-                              : "-"}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-black/10 bg-white p-4">
-                      <h4 className="text-sm font-semibold text-black mb-3">
-                        전체 결함 확률
-                      </h4>
-
-                      <div className="space-y-2">
-                        {Object.entries(autoImage?.all_scores || {}).map(
-                          ([className, score]) => (
-                            <div
-                              key={className}
-                              className="flex items-center justify-between gap-3"
-                            >
-                              <span className="text-xs text-black w-32 truncate">
-                                {className}
-                              </span>
-
-                              <div className="flex items-center gap-3 flex-1">
-                                <div className="h-2 rounded-full bg-black/10 overflow-hidden flex-1">
-                                  <div
-                                    className="h-full bg-blue-600"
-                                    style={{ width: `${(score || 0) * 100}%` }}
-                                  />
-                                </div>
-                                <span className="text-xs font-mono text-black w-14 text-right">
-                                  {((score || 0) * 100).toFixed(1)}%
-                                </span>
-                              </div>
-                            </div>
-                          )
-                        )}
-
-                        {!autoImage && (
-                          <div className="text-sm text-black/60">
-                            데이터 수신 대기 중...
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <span className="text-[10px] font-bold px-3 py-1 rounded-full bg-gray-900 text-white">
+                Live
+              </span>
             </div>
-          </div>
 
-          {/* Right: Vibration */}
-          <div className="col-span-12 lg:col-span-6 space-y-6">
-            <div className="rounded-2xl border border-black/10 bg-white shadow-sm">
-              <div className="px-6 pt-6 pb-4 flex items-center justify-between">
-                <h3 className="font-semibold flex items-center gap-2 text-black">
-                  <Activity className="w-4 h-4 text-purple-700" />
-                  진동 이상 감지 (LSTM)
-                </h3>
-                <span className="text-xs px-2 py-1 rounded-lg bg-white border border-black/10 text-black">
-                  Live
-                </span>
-              </div>
-
-              <div className="px-6 pb-6 space-y-5">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className={cn("rounded-2xl border p-4", statusBadge.wrap)}>
-                    <div className="flex items-center gap-2">
-                      {statusBadge.icon}
-                      <span className="font-bold text-black">{statusBadge.label}</span>
-                    </div>
-                    <p className="text-xs text-black mt-2">상태</p>
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className={cn("rounded-2xl border p-5", statusBadge.wrap)}>
+                  <div className="flex items-center gap-2">
+                    {statusBadge.icon}
+                    <span className="font-bold text-gray-900">{statusBadge.label}</span>
                   </div>
+                  <p className="text-xs text-gray-600 mt-2">상태</p>
+                </div>
 
-                  <div className="rounded-2xl border border-black/10 bg-white p-4">
-                    <p className="text-xs text-black">Reconstruction Error</p>
-                    <p className="text-2xl font-mono font-bold text-black mt-2">
-                      {typeof vibration?.reconstruction_error === "number"
-                        ? vibration.reconstruction_error.toFixed(4)
+                <div className="rounded-2xl border border-gray-200 bg-white p-5">
+                  <p className="text-xs text-gray-600">Reconstruction Error</p>
+                  <p className="text-2xl font-mono font-bold text-gray-900 mt-2">
+                    {typeof vibration?.reconstruction_error === "number"
+                      ? vibration.reconstruction_error.toFixed(4)
+                      : "0.0000"}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-2">
+                    threshold:{" "}
+                    <span className="font-mono text-gray-900">
+                      {typeof vibration?.threshold === "number"
+                        ? vibration.threshold.toFixed(4)
                         : "0.0000"}
-                    </p>
-                    <p className="text-xs text-black mt-2">
-                      threshold:{" "}
-                      <span className="font-mono text-black">
-                        {typeof vibration?.threshold === "number"
-                          ? vibration.threshold.toFixed(4)
-                          : "0.0000"}
-                      </span>
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-sm font-semibold text-black mb-3">
-                    센서 데이터 추이 (3개 센서)
-                  </h4>
-                  <div
-                    className="rounded-2xl border border-black/10 bg-white p-3"
-                    style={{ height: 220 }}
-                  >
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={sensorHistory}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.12)" />
-                        <XAxis dataKey="time" hide />
-                        <YAxis stroke="rgba(0,0,0,0.9)" domain={["auto", "auto"]} />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: "#ffffff",
-                            border: "1px solid rgba(0,0,0,0.2)",
-                            color: "#000",
-                            borderRadius: 12,
-                          }}
-                          labelStyle={{ color: "#000" }}
-                        />
-                        <Legend wrapperStyle={{ color: "#000" }} />
-                        <Line
-                          type="monotone"
-                          dataKey="sensor_0"
-                          stroke="#2563eb"
-                          strokeWidth={2}
-                          dot={false}
-                          name="Sensor 0"
-                          isAnimationActive={false}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="sensor_1"
-                          stroke="#059669"
-                          strokeWidth={2}
-                          dot={false}
-                          name="Sensor 1"
-                          isAnimationActive={false}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="sensor_2"
-                          stroke="#d97706"
-                          strokeWidth={2}
-                          dot={false}
-                          name="Sensor 2"
-                          isAnimationActive={false}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-sm font-semibold text-black mb-3">
-                    Reconstruction Error 추이
-                  </h4>
-                  <div
-                    className="rounded-2xl border border-black/10 bg-white p-3"
-                    style={{ height: 170 }}
-                  >
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={vibrationHistory}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.12)" />
-                        <XAxis dataKey="time" hide />
-                        <YAxis stroke="rgba(0,0,0,0.9)" domain={["auto", "auto"]} />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: "#ffffff",
-                            border: "1px solid rgba(0,0,0,0.2)",
-                            color: "#000",
-                            borderRadius: 12,
-                          }}
-                          labelStyle={{ color: "#000" }}
-                        />
-                        <Legend wrapperStyle={{ color: "#000" }} />
-                        <Line
-                          type="monotone"
-                          dataKey="value"
-                          stroke="#7c3aed"
-                          strokeWidth={2}
-                          dot={false}
-                          isAnimationActive={false}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
+                    </span>
+                  </p>
                 </div>
               </div>
-            </div>
-          </div>
 
-          {/* Bottom: Distribution */}
-          <div className="col-span-12">
-            <div className="rounded-2xl border border-black/10 bg-white shadow-sm">
-              <div className="px-6 pt-6 pb-4 flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-black">결함 유형 분포</h3>
-                  <span className="text-xs text-black/70">
-                    (이미지 예측 결과의 확률(all_scores)을 누적)
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-bold text-gray-900">센서 데이터 추이 (3개 센서)</h4>
+                  <span className="text-[10px] font-bold px-3 py-1 rounded-full bg-gray-900 text-white">
+                    last 30
                   </span>
                 </div>
 
-                <button
-                  onClick={resetDefectDistribution}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white hover:bg-black/5 border border-black/15 text-black transition-colors text-sm"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  누적 초기화
-                </button>
-              </div>
-
-              <div className="px-6 pb-6">
-                <div
-                  className="rounded-2xl border border-black/10 bg-white p-3"
-                  style={{ height: 320 }}
-                >
+                <div className="rounded-2xl border border-gray-200 bg-white p-3" style={{ height: 230 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={defectDistribution}
-                      margin={{ left: 20, right: 20, top: 10, bottom: 40 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.12)" />
-                      <XAxis
-                        dataKey="name"
-                        type="category"
-                        tick={{ fontSize: 12, fill: "#000" }}
-                        axisLine={{ stroke: "rgba(0,0,0,0.3)" }}
-                        tickLine={{ stroke: "rgba(0,0,0,0.3)" }}
-                        interval={0}
-                        angle={-20}
-                        textAnchor="end"
-                        height={60}
-                      />
-                      <YAxis
-                        type="number"
-                        tick={{ fill: "#000" }}
-                        axisLine={{ stroke: "rgba(0,0,0,0.3)" }}
-                        tickLine={{ stroke: "rgba(0,0,0,0.3)" }}
-                      />
+                    <LineChart data={sensorHistory}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                      <XAxis dataKey="time" hide />
+                      <YAxis stroke="#94a3b8" domain={["auto", "auto"]} />
                       <Tooltip
-                        cursor={{ fill: "rgba(0,0,0,0.06)" }}
                         contentStyle={{
-                          backgroundColor: "#ffffff",
-                          border: "1px solid rgba(0,0,0,0.2)",
-                          color: "#000",
-                          borderRadius: 12,
+                          backgroundColor: "white",
+                          border: "1px solid #f1f5f9",
+                          borderRadius: "12px",
+                          boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
                         }}
-                        labelStyle={{ color: "#000" }}
+                        labelStyle={{ color: "#111827" }}
                       />
-                      <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={28} />
-                    </BarChart>
+                      <Legend wrapperStyle={{ color: "#111827" }} />
+                      <Line type="monotone" dataKey="sensor_0" stroke="#2563eb" strokeWidth={3} dot={false} isAnimationActive={false} />
+                      <Line type="monotone" dataKey="sensor_1" stroke="#10b981" strokeWidth={3} dot={false} isAnimationActive={false} />
+                      <Line type="monotone" dataKey="sensor_2" stroke="#f59e0b" strokeWidth={3} dot={false} isAnimationActive={false} />
+                    </LineChart>
                   </ResponsiveContainer>
                 </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-bold text-gray-900">Reconstruction Error 추이</h4>
+                  <span className="text-[10px] font-bold px-3 py-1 rounded-full bg-gray-900 text-white">
+                    last 30
+                  </span>
+                </div>
+
+                <div className="rounded-2xl border border-gray-200 bg-white p-3" style={{ height: 190 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={vibrationHistory}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                      <XAxis dataKey="time" hide />
+                      <YAxis stroke="#94a3b8" domain={["auto", "auto"]} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "white",
+                          border: "1px solid #f1f5f9",
+                          borderRadius: "12px",
+                          boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
+                        }}
+                        labelStyle={{ color: "#111827" }}
+                      />
+                      <Legend wrapperStyle={{ color: "#111827" }} />
+                      <Line type="monotone" dataKey="value" stroke="#7c3aed" strokeWidth={3} dot={false} isAnimationActive={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom: Distribution */}
+        <div className="col-span-12">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">결함 유형 분포</h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  이미지 예측 결과의 확률(all_scores)을 누적
+                </p>
+              </div>
+
+              <button
+                onClick={resetDefectDistribution}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-gray-50 border border-gray-200 text-gray-900 transition-colors text-sm font-bold shadow-sm"
+              >
+                <RotateCcw className="w-4 h-4" />
+                누적 초기화
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="rounded-2xl border border-gray-200 bg-white p-3" style={{ height: 320 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={defectDistribution} margin={{ left: 20, right: 20, top: 10, bottom: 40 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                    <XAxis
+                      dataKey="name"
+                      type="category"
+                      tick={{ fontSize: 12, fill: "#111827" }}
+                      axisLine={{ stroke: "#e5e7eb" }}
+                      tickLine={{ stroke: "#e5e7eb" }}
+                      interval={0}
+                      angle={-20}
+                      textAnchor="end"
+                      height={60}
+                    />
+                    <YAxis
+                      type="number"
+                      tick={{ fill: "#111827" }}
+                      axisLine={{ stroke: "#e5e7eb" }}
+                      tickLine={{ stroke: "#e5e7eb" }}
+                    />
+                    <Tooltip
+                      cursor={{ fill: "rgba(0,0,0,0.06)" }}
+                      contentStyle={{
+                        backgroundColor: "white",
+                        border: "1px solid #f1f5f9",
+                        borderRadius: "12px",
+                        boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
+                        color: "#111827",
+                      }}
+                      labelStyle={{ color: "#111827" }}
+                    />
+                    <Bar dataKey="value" radius={[10, 10, 0, 0]} barSize={28} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="mt-2 text-xs text-gray-500">
+                * 누적 값이 커질수록 막대가 커집니다. 필요 시 “누적 초기화”로 리셋하세요.
               </div>
             </div>
           </div>
