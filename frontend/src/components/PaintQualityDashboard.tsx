@@ -306,7 +306,7 @@ export const PaintQualityDashboard: React.FC = () => {
             </div>
             <div>
               <h2 className="text-3xl font-bold text-gray-900">도장 품질 관리</h2>
-              <p className="text-gray-600 mt-1">AUTO(5초) 기반 도장 결함 탐지 및 이력 관리</p>
+              <p className="text-gray-600 mt-1">도장 결함 탐지 및 이력 관리</p>
               <p className="text-xs text-gray-500 mt-1">
                 Polling:{" "}
                 {POLL_MS / 1000}s

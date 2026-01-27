@@ -204,7 +204,7 @@ export function WindShieldDashboard() {
         } catch {
           // 스트리밍은 조용히 무시
         }
-      }, 500);
+      }, 5000);
     }
 
     return () => {
@@ -290,7 +290,7 @@ export function WindShieldDashboard() {
           <div>
             <div className="flex items-center gap-3 mb-2">
               <div className="w-12 h-12 bg-gradient-to-br from-gray-900 to-gray-700 rounded-xl flex items-center justify-center">
-                <Layers className="w-7 h-7 text-white" />
+                <Layers className="w-7 h-7 text-black" />
               </div>
               <div>
                 <h2 className="text-3xl font-bold text-gray-900">윈드실드 사이드 몰딩 공정</h2>

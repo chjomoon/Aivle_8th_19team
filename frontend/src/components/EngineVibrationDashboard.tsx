@@ -195,7 +195,7 @@ export function EngineVibrationDashboard() {
         } catch (e) {
           console.error("[ENGINE] monitor loop error:", e);
         }
-      }, 1000);
+      }, 5000);
     }
 
     return () => {
@@ -281,7 +281,7 @@ export function EngineVibrationDashboard() {
           <div>
             <div className="flex items-center gap-3 mb-2">
               <div className="w-12 h-12 bg-gradient-to-br from-gray-900 to-gray-700 rounded-xl flex items-center justify-center">
-                <Layers className="w-7 h-7 text-white" />
+                <Layers className="w-7 h-7 text-black" />
               </div>
               <div>
                 <h2 className="text-3xl font-bold text-gray-900">엔진 진동 분석 </h2>
