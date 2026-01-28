@@ -166,6 +166,100 @@ public class InitDb {
             log.info("proudction1 상태 : {}", production1.getProductionStatus());
 
             /**
+             *  공정 타입
+             */
+            ProcessType press = ProcessType.createProcessType("프레스", 1, true);
+            ProcessType welding = ProcessType.createProcessType("용접", 2, true);
+            ProcessType assembly = ProcessType.createProcessType("조립", 3, true);
+            ProcessType painting = ProcessType.createProcessType("도장", 4, true);
+            ProcessType inspection = ProcessType.createProcessType("검수", 5, true);
+            em.persist(press);
+            em.persist(welding);
+            em.persist(assembly);
+            em.persist(painting);
+            em.persist(inspection);
+
+            /**
+             *  설비
+             */
+            Equipment pressEquipment_1 = Equipment.createEquipment("프레스 1호기", press);
+            Equipment pressEquipment_2 = Equipment.createEquipment("프레스 2호기", press);
+            Equipment weldingEquipment_1 = Equipment.createEquipment("용접 1호기", welding);
+            Equipment assemblyEquipment_1 = Equipment.createEquipment("조립 1호기", assembly);
+            Equipment paintingEquipment_1 = Equipment.createEquipment("도장 1호기", painting);
+            Equipment inspectionEquipment_1 = Equipment.createEquipment("검수 1호기", inspection);
+            em.persist(pressEquipment_1);
+            em.persist(pressEquipment_2);
+            em.persist(weldingEquipment_1);
+            em.persist(assemblyEquipment_1);
+            em.persist(paintingEquipment_1);
+            em.persist(inspectionEquipment_1);
+
+            /**
+             *  공정 수행
+             */
+            ProcessExecution processExecution_press = ProcessExecution.createEntity(LocalDateTime.now(), 1, production1, press, pressEquipment_1);
+            ProcessExecution processExecution_assembly = ProcessExecution.createEntity(LocalDateTime.now(), 1, production1, assembly, assemblyEquipment_1);
+            ProcessExecution processExecution_welding = ProcessExecution.createEntity(LocalDateTime.now(), 1, production1, welding, weldingEquipment_1);
+            ProcessExecution processExecution_painting = ProcessExecution.createEntity(LocalDateTime.now(), 1, production1, painting, paintingEquipment_1);
+            ProcessExecution processExecution_inspection = ProcessExecution.createEntity(LocalDateTime.now(), 1, production1, inspection, inspectionEquipment_1);
+            em.persist(processExecution_press);
+            em.persist(processExecution_assembly);
+            em.persist(processExecution_welding);
+            em.persist(processExecution_painting);
+            em.persist(processExecution_inspection);
+
+            // 프레스 공정 가동
+            processExecution_press.operate();
+
+            /**
+             *  센서 (프레스 공정 컬럼)
+             */
+            Sensor sensor1 = Sensor.create("timestamp", Unit.MS, pressEquipment_1);
+            Sensor sensor2 = Sensor.create("ai0_vibration", Unit.HZ, pressEquipment_1);
+            Sensor sensor3 = Sensor.create("ai1_vibration", Unit.HZ, pressEquipment_1);
+            Sensor sensor4 = Sensor.create("ai2_current", Unit.HZ, pressEquipment_1);
+            Sensor sensor5 = Sensor.create("equipment_state", Unit.NONE, pressEquipment_1);
+            em.persist(sensor1);
+            em.persist(sensor2);
+            em.persist(sensor3);
+            em.persist(sensor4);
+            em.persist(sensor5);
+
+            /**
+             *  센서 데이터 (프레스 공정 컬럼의 데이터)
+             */
+            SensorData sensorData1 = SensorData.create(55d, LocalDateTime.now(), sensor1);
+            SensorData sensorData2 = SensorData.create(50d, LocalDateTime.now(), sensor2);
+            SensorData sensorData3 = SensorData.create(51d, LocalDateTime.now(), sensor3);
+            SensorData sensorData4 = SensorData.create(52d, LocalDateTime.now(), sensor4);
+            SensorData sensorData5 = SensorData.create(0d, LocalDateTime.now(), sensor5);
+            em.persist(sensorData1);
+            em.persist(sensorData2);
+            em.persist(sensorData3);
+            em.persist(sensorData4);
+            em.persist(sensorData5);
+
+            // 프레스 공정 완료
+            processExecution_press.complete(LocalDateTime.now());
+
+            // 부품조립 공정 가동 -> 완료
+            processExecution_assembly.operate();
+            processExecution_assembly.complete(LocalDateTime.now());
+
+            // 용접 공정 가동 -> 완료
+            processExecution_welding.operate();
+            processExecution_welding.complete(LocalDateTime.now());
+
+            // 도장 공정 가동 -> 완료
+            processExecution_painting.operate();
+            processExecution_painting.complete(LocalDateTime.now());
+
+            // 검수 공정 가동 -> 완료
+            processExecution_inspection.operate();
+            processExecution_inspection.complete(LocalDateTime.now());
+
+            /**
              *  생산 완료
              */
             // 생산될 차량들 시리얼 넘버 목록

@@ -54,6 +54,7 @@ public class SecurityConfig {
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/board/**").permitAll()
                         .requestMatchers("/api/v1/dashboard/**").permitAll() // Dashboard is public as per current FE
                         .requestMatchers("/api/v1/chatbot/**").permitAll() // Chatbot is public
+                        .requestMatchers("/api/v1/**").permitAll() // Chatbot is public
                         .requestMatchers("/swagger-ui/**").permitAll() // Swagger
                         .requestMatchers("/v3/api-docs/**").permitAll() // Swagger
                         .anyRequest().authenticated());

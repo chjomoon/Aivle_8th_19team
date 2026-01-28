@@ -4,7 +4,9 @@ import com.example.automobile_risk.controller.dto.ProductionCreateForm;
 import com.example.automobile_risk.controller.dto.ProductionUpdateForm;
 import com.example.automobile_risk.entity.Production;
 import com.example.automobile_risk.exception.ProductionNotFoundException;
+import com.example.automobile_risk.repository.ProcessExecutionRepository;
 import com.example.automobile_risk.repository.ProductionRepository;
+import com.example.automobile_risk.repository.ProductionVehicleRepository;
 import com.example.automobile_risk.service.dto.ProductionDetailResponse;
 import com.example.automobile_risk.service.dto.ProductionListResponse;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +24,7 @@ import java.util.List;
 public class ProductionService {
 
     private final ProductionRepository productionRepository;
+    private final ProcessExecutionRepository processExecutionRepository;
 
     /**
      *  1. 생산 생성
@@ -87,6 +90,15 @@ public class ProductionService {
         Production production = productionRepository.findById(productionId)
                 .orElseThrow(() -> new ProductionNotFoundException(productionId));
 
+        // 모든 공정이 완료되었는지 검증
+        long remaining =
+                processExecutionRepository.countNotCompletedByProductionId(productionId);
+
+        if (remaining > 0) {
+            throw new IllegalStateException(
+                    "완료되지 않은 공정이 존재하여 생산을 완료할 수 없습니다."
+            );
+        }
 
         production.complete(endDate);
 
