@@ -10,9 +10,7 @@ import { PaintQualityDashboard } from './components/PaintQualityDashboard';
 import { FacilityDashboard } from './components/FacilityDashboard';
 import { MainDashboard } from './components/MainDashboard';
 import { AIChatbot } from './components/AIChatbot';
-import { BoardListPage } from './components/Board/BoardListPage';
-import { BoardWritePage } from './components/Board/BoardWritePage';
-import { BoardDetailPage } from './components/Board/BoardDetailPage';
+
 
 export type MenuType = 'main' | 'press' | 'engine' | 'body' | 'paint' | 'facility';
 
@@ -89,10 +87,6 @@ export default function App() {
                 <Route path="/paint" element={<PaintQualityDashboard />} />
                 <Route path="/facility" element={<FacilityDashboard />} />
 
-                {/* Board Routes */}
-                <Route path="/board" element={<BoardListPage />} />
-                <Route path="/board/write" element={<BoardWritePage />} />
-                <Route path="/board/:id" element={<BoardDetailPage />} />
               </Routes>
             </Layout>
           </ProtectedRoute>
