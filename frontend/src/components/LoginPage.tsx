@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Factory, Lock, User } from 'lucide-react';
 
 interface LoginPageProps {
@@ -7,17 +7,27 @@ interface LoginPageProps {
 }
 
 export function LoginPage({ onLogin }: LoginPageProps) {
+  const navigate = useNavigate();
+
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+
+  const saveSession = (token: string, uname: string) => {
+    localStorage.setItem('token', token);
+    localStorage.setItem('username', uname);
+    onLogin(uname);
+    // ✅ 로그인 후 원하는 첫 화면으로 이동 (App.tsx에서 /login 접근 시 /press로 보내게 했으니 맞춰줌)
+    navigate('/press', { replace: true });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    // Special bypass for demo consistency if backend is offline or for quick testing
+    // ✅ demo bypass를 유지하되, token도 저장해서 403이 안 뜨게 함
     if (username === 'test' && password === 'test') {
-      onLogin(username);
+      saveSession('DEV_TOKEN', username);
       return;
     }
 
@@ -28,15 +38,33 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         body: JSON.stringify({ username, password }),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('username', data.username);
-        onLogin(data.username);
-      } else {
-        const data = await response.json();
-        setError(data.error || '로그인 실패');
+      // 에러일 때는 body가 json이 아닐 수도 있으니 안전 처리
+      if (!response.ok) {
+        let msg = '로그인 실패';
+        try {
+          const errJson = await response.json();
+          msg = errJson?.error || errJson?.message || msg;
+        } catch {
+          const text = await response.text().catch(() => '');
+          if (text) msg = text;
+        }
+        setError(msg);
+        return;
       }
+
+      const data = await response.json();
+
+      // ✅ Swagger 예시: { token, username }
+      // ✅ 혹시 래핑되어 오는 경우도 대비: { data: { token, username } }
+      const token = data?.token ?? data?.data?.token;
+      const uname = data?.username ?? data?.data?.username ?? username;
+
+      if (!token) {
+        setError('로그인 응답에 token이 없습니다. (백엔드 응답 구조 확인 필요)');
+        return;
+      }
+
+      saveSession(token, uname);
     } catch (err) {
       console.error(err);
       setError('서버 연결 실패');
@@ -46,7 +74,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Logo & Title */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-4">
             <Factory className="w-8 h-8 text-white" />
@@ -55,7 +82,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           <p className="text-slate-300">이상 및 납기 리스크 예측 플랫폼</p>
         </div>
 
-        {/* Login Form */}
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">로그인</h2>
 
