@@ -69,6 +69,22 @@ export function Sidebar({ username, onLogout }: SidebarProps) {
           <LogOut className="w-5 h-5" />
           <span>로그아웃</span>
         </button>
+        
+        <div className="space-y-1 mb-3">
+          <Link
+            to="/terms"
+            className="block text-xs text-slate-400 hover:text-slate-300 px-4 py-1"
+          >
+            이용약관
+          </Link>
+          <Link
+            to="/privacy"
+            className="block text-xs text-slate-400 hover:text-slate-300 px-4 py-1"
+          >
+            개인정보처리방침
+          </Link>
+        </div>
+        
         <div className="text-xs text-slate-500">
           마지막 업데이트: {new Date().toLocaleTimeString('ko-KR')}
         </div>

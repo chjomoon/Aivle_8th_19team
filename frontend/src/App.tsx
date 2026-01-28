@@ -14,6 +14,8 @@ import { AIChatbot } from './components/AIChatbot';
 import { BoardListPage } from './components/Board/BoardListPage';
 import { BoardWritePage } from './components/Board/BoardWritePage';
 import { BoardDetailPage } from './components/Board/BoardDetailPage';
+import { TermsOfServicePage } from './components/TermsOfServicePage';
+import { PrivacyPolicyPage } from './components/PrivacyPolicyPage';
 
 function Layout({ children, username, onLogout }: { children: React.ReactNode, username: string, onLogout: () => void }) {
   return (
@@ -94,6 +96,10 @@ export default function App() {
                 <Route path="/board" element={<BoardListPage />} />
                 <Route path="/board/write" element={<BoardWritePage />} />
                 <Route path="/board/:id" element={<BoardDetailPage />} />
+
+                {/* Policy Routes */}
+                <Route path="/terms" element={<TermsOfServicePage />} />
+                <Route path="/privacy" element={<PrivacyPolicyPage />} />
               </Routes>
             </Layout>
           </ProtectedRoute>
