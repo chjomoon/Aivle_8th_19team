@@ -17,26 +17,9 @@ import { BoardDetailPage } from "./components/Board/BoardDetailPage";
 import { OrderPage } from "./components/order/OrderPage";
 import { ProductionPage } from "./components/order/ProductionPage";
 import { ProcessPage } from "./components/order/ProcessPage";
-=======
-import { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { LoginPage } from './components/LoginPage';
-import { SignupPage } from './components/SignupPage';
-import { Sidebar } from './components/Sidebar';
-import { PressMachineDashboard } from './components/PressMachineDashboard';
-import { WindShieldDashboard } from './components/WindShieldDashboard';
-import { EngineVibrationDashboard } from './components/EngineVibrationDashboard';
-import { WeldingImageDashboard } from './components/WeldingImageDashboard';
-import { BodyAssemblyDashboard } from './components/BodyAssemblyDashboard';
-import { PaintQualityDashboard } from './components/PaintQualityDashboard';
-import { MainDashboard } from './components/MainDashboard';
-import { AIChatbot } from './components/AIChatbot';
-import { BoardListPage } from './components/Board/BoardListPage';
-import { BoardWritePage } from './components/Board/BoardWritePage';
-import { BoardDetailPage } from './components/Board/BoardDetailPage';
 import { TermsOfServicePage } from './components/TermsOfServicePage';
 import { PrivacyPolicyPage } from './components/PrivacyPolicyPage';
->>>>>>> 84f553e50de459bd86dbfdf9527b00f00f7aed48
+
 
 function Layout({
   children,
@@ -136,11 +119,14 @@ export default function App() {
                   <Route path="/body" element={<BodyAssemblyDashboard />} />
                   <Route path="/paint" element={<PaintQualityDashboard />} />
 
-<<<<<<< HEAD
-                  {/* Board */}
+                  {/* Board Routes */}
                   <Route path="/board" element={<BoardListPage />} />
                   <Route path="/board/write" element={<BoardWritePage />} />
                   <Route path="/board/:id" element={<BoardDetailPage />} />
+
+                  {/* Policy Routes */}
+                  <Route path="/terms" element={<TermsOfServicePage />} />
+                  <Route path="/privacy" element={<PrivacyPolicyPage />} />
 
                   {/* 주문생산 */}
                   <Route path="/order/orders" element={<OrderPage />} />
@@ -159,20 +145,6 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-=======
-                {/* Board Routes */}
-                <Route path="/board" element={<BoardListPage />} />
-                <Route path="/board/write" element={<BoardWritePage />} />
-                <Route path="/board/:id" element={<BoardDetailPage />} />
-
-                {/* Policy Routes */}
-                <Route path="/terms" element={<TermsOfServicePage />} />
-                <Route path="/privacy" element={<PrivacyPolicyPage />} />
-              </Routes>
-            </Layout>
-          </ProtectedRoute>
-        } />
->>>>>>> 84f553e50de459bd86dbfdf9527b00f00f7aed48
       </Routes>
     </BrowserRouter>
   );
