@@ -114,7 +114,6 @@ export function OrderPage() {
     <div className="p-6 space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">주문</h1>
-        <p className="text-slate-500 mt-1">/api/v1/order 연동</p>
       </div>
 
       {err && (
