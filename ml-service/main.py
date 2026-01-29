@@ -14,14 +14,13 @@ import windshield
 import engine
 
 from paint import service as paint_service
-
 import body_assembly
 from body_assembly import service as body_service
 
-# welding_image 모듈
-import welding_image
+# ✅ welding_image는 "본래 welding-image FastAPI 계약"을 그대로 제공하는 모듈로 구성
 from welding_image.pipeline import full_pipeline
 from welding_image.schemas import DefectResponse
+import welding_image
 
 app = FastAPI(title="ML Service API", version="1.0.0")
 

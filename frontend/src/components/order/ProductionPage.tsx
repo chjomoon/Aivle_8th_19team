@@ -32,9 +32,10 @@ export function ProductionPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  // 할당(allocate) UI용: “주문ID + 생산ID”
+  // 할당(allocate) UI용: "주문ID + 생산ID + 할당갯수"
   const [selectedOrderId, setSelectedOrderId] = useState<string>("");
   const [selectedProductionId, setSelectedProductionId] = useState<string>("");
+  const [allocatedQty, setAllocatedQty] = useState<number>(1);
 
   const refresh = async () => {
     setErr(null);
@@ -52,6 +53,21 @@ export function ProductionPage() {
 
   useEffect(() => {
     refresh();
+  }, []);
+
+  // 페이지가 다시 보여질 때마다 자동 새로고침
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        refresh();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   const before = useMemo(() => productions.filter(isBeforeStart), [productions]);
@@ -86,14 +102,20 @@ export function ProductionPage() {
   // ✅ 주문-생산 할당
   const allocate = async () => {
     if (!selectedOrderId || !selectedProductionId) return;
+    if (!allocatedQty || allocatedQty < 1) {
+      setErr("할당 갯수는 1 이상이어야 합니다.");
+      return;
+    }
     try {
       // payload는 백엔드 스펙에 맞게 조정
       await orderProductionsApi.allocate({
         orderId: Number(selectedOrderId) || selectedOrderId,
         productionId: Number(selectedProductionId) || selectedProductionId,
+        allocatedQty: Number(allocatedQty),
       });
       setSelectedOrderId("");
       setSelectedProductionId("");
+      setAllocatedQty(1);
       await refresh();
     } catch (e: any) {
       setErr(e?.message ?? "할당 실패");
@@ -112,7 +134,7 @@ export function ProductionPage() {
       {/* (옵션) 주문-생산 할당 UI */}
       <div className="bg-white rounded-xl border p-4">
         <div className="text-sm font-semibold">주문 → 생산 할당(allocate)</div>
-        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
             <div className="text-xs text-slate-600 mb-1">주문 선택</div>
             <select className="w-full border rounded-lg px-3 py-2" value={selectedOrderId} onChange={(e) => setSelectedOrderId(e.target.value)}>
@@ -121,7 +143,7 @@ export function ProductionPage() {
                 const id = o?.id ?? o?.orderId;
                 return (
                   <option key={String(id)} value={String(id)}>
-                    #{id} / 모델 {getField(o, ["vehicleModelId", "modelId"])} / {getField(o, ["quantity", "count"])}대
+                    #{id} / 모델 {getField(o, ["vehicleModelId", "modelId"])} / {getField(o, ["orderQty", "quantity", "count"])}대
                   </option>
                 );
               })}
@@ -141,6 +163,18 @@ export function ProductionPage() {
                 );
               })}
             </select>
+          </div>
+
+          <div>
+            <div className="text-xs text-slate-600 mb-1">할당 갯수</div>
+            <input
+              className="w-full border rounded-lg px-3 py-2"
+              type="number"
+              min={1}
+              value={allocatedQty}
+              onChange={(e) => setAllocatedQty(Number(e.target.value))}
+              placeholder="갯수"
+            />
           </div>
 
           <div className="flex items-end justify-end gap-2">

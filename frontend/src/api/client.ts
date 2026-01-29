@@ -23,7 +23,14 @@ async function request<T>(method: HttpMethod, path: string, body?: any): Promise
   const contentType = res.headers.get("content-type") || "";
   if (!contentType.includes("application/json")) return undefined as T;
 
-  return (await res.json()) as T;
+  const result = await res.json();
+
+  // 백엔드 ApiResponse { status, message, data } 형태면 data 추출
+  if (result && typeof result === 'object' && 'data' in result) {
+    return result.data as T;
+  }
+
+  return result as T;
 }
 
 export const api = {

@@ -2,6 +2,7 @@ package com.example.automobile_risk.config;
 
 import com.example.automobile_risk.entity.*;
 import com.example.automobile_risk.entity.enumclass.Unit;
+import com.example.automobile_risk.repository.VehicleModelRepository;
 import com.example.automobile_risk.service.ManufacturingOrchestrationService;
 import jakarta.annotation.PostConstruct;
 import jakarta.persistence.EntityManager;
@@ -34,8 +35,15 @@ public class InitDb {
 
         private final EntityManager em;
         private final ManufacturingOrchestrationService manufacturingOrchestrationService;
+        private final VehicleModelRepository vehicleModelRepository;
 
         public void vehicleModelDbInit() {
+
+            // Skip if seed data already exists
+            if (vehicleModelRepository.count() > 0) {
+                log.info("Seed data already exists, skipping vehicleModelDbInit");
+                return;
+            }
 
             /**
              *  차량 모델
