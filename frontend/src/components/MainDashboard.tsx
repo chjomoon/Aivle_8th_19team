@@ -14,15 +14,79 @@ interface DashboardData {
   overallRiskLevel?: string;
 }
 
+interface AnomalyItem {
+  process: string;
+  count: number;
+  avgDelayPerIssue: number;
+}
+
+interface OrderPredictionSummary {
+  orderId: number;
+  predictedDelayHours: number;
+  riskLevel: string;
+  eventCount: number;
+  topContributorCode: string;
+  orderDate: string | null;
+  dueDate: string | null;
+  vehicleModelName: string | null;
+}
+
+interface PredictionOverview {
+  totalOrders: number;
+  maxDelayHours: number;
+  avgDelayHours: number;
+  riskDistribution: Record<string, number>;
+  orders: OrderPredictionSummary[];
+}
+
+// ===== Helpers =====
+
+const RISK_STYLES: Record<string, { label: string; bg: string; text: string; border: string; icon: string }> = {
+  LOW:      { label: '안전', bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-300', icon: 'bg-green-100' },
+  MEDIUM:   { label: '주의', bg: 'bg-yellow-100', text: 'text-yellow-700', border: 'border-yellow-300', icon: 'bg-yellow-100' },
+  HIGH:     { label: '위험', bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-300', icon: 'bg-red-100' },
+  CRITICAL: { label: '심각', bg: 'bg-red-200', text: 'text-red-800', border: 'border-red-400', icon: 'bg-red-200' },
+};
+
+function getRiskStyle(level?: string | null) {
+  return RISK_STYLES[level ?? ''] ?? RISK_STYLES['LOW'];
+}
+
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '-';
+  return d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function addHoursToDate(iso: string | null | undefined, hours: number): string {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '-';
+  const predicted = new Date(d.getTime() + hours * 60 * 60 * 1000);
+  return predicted.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// ===== Component =====
+
 export function MainDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
+  const [prediction, setPrediction] = useState<PredictionOverview | null>(null);
   const [loading, setLoading] = useState(true);
+  const [predLoading, setPredLoading] = useState(true);
 
   useEffect(() => {
     fetch('/api/v1/dashboard/main')
       .then(res => res.json())
       .then(setData)
+      .catch(err => console.error('Dashboard fetch failed:', err))
       .finally(() => setLoading(false));
+
+    fetch('/api/v1/delay-prediction/overview')
+      .then(res => res.json())
+      .then((json) => setPrediction(json.data ?? json))
+      .catch(err => console.error('Prediction fetch failed:', err))
+      .finally(() => setPredLoading(false));
   }, []);
 
   if (loading || !data) {
@@ -167,14 +231,14 @@ export function MainDashboard() {
       {/* Delivery Prediction Card */}
       <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl shadow-sm p-6 border-2 border-blue-200 mb-8">
         <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-4">
-              <Calendar className="w-6 h-6 text-blue-600" />
-              <h3 className="text-xl font-bold text-gray-900">납기 예측 분석</h3>
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-4">
+            <Calendar className="w-6 h-6 text-blue-600" />
+            <h3 className="text-xl font-bold text-gray-900">납기 예측 분석</h3>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-white rounded-lg p-4 shadow-sm">
+            <div className="bg-white rounded-lg p-4 shadow-sm">
                 <p className="text-sm text-gray-600 mb-1">예정 납기일</p>
                 <p className="text-lg font-bold text-gray-900">
                   {originalDeadline.toLocaleDateString('ko-KR', {
@@ -184,7 +248,7 @@ export function MainDashboard() {
                     minute: '2-digit'
                   })}
                 </p>
-              </div>
+          </div>
 
               <div className="bg-white rounded-lg p-4 shadow-sm">
                 <p className="text-sm text-gray-600 mb-1">예상 납기일</p>
@@ -209,19 +273,19 @@ export function MainDashboard() {
               </div>
             </div>
 
-            <div className="mt-4 p-4 bg-white rounded-lg">
-              <p className="text-sm font-semibold text-gray-700 mb-2">공정별 지연 기여도</p>
-              <div className="grid grid-cols-5 gap-2">
-                {anomalyData.map((item) => {
-                  const delay = item.count * item.avgDelayPerIssue;
-                  return (
-                    <div key={item.process} className="text-center">
-                      <p className="text-xs text-gray-600">{item.process}</p>
-                      <p className="text-sm font-bold text-gray-900">{delay.toFixed(1)}h</p>
-                      <p className="text-xs text-gray-500">({item.count}건)</p>
-                    </div>
-                  );
-                })}
+          <div className="mt-4 p-4 bg-white rounded-lg">
+            <p className="text-sm font-semibold text-gray-700 mb-2">공정별 지연 기여도</p>
+            <div className="grid grid-cols-5 gap-2">
+              {anomalyData.map((item) => {
+                const delay = item.count * item.avgDelayPerIssue;
+                return (
+                  <div key={item.process} className="text-center">
+                    <p className="text-xs text-gray-600">{item.process}</p>
+                    <p className="text-sm font-bold text-gray-900">{delay.toFixed(1)}h</p>
+                    <p className="text-xs text-gray-500">({item.count}건)</p>
+                  </div>
+                );
+              })}
               </div>
             </div>
           </div>
@@ -248,25 +312,25 @@ export function MainDashboard() {
 
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
           <h3 className="text-lg font-bold text-gray-900 mb-4">전체 공정 상태</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={processStatus}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                outerRadius={80}
-                fill="#8884d8"
-                dataKey="value"
-              >
-                {processStatus.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={processStatus}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {processStatus.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
         </div>
       </div>
 
