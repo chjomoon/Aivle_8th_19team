@@ -90,8 +90,8 @@ export default function App() {
           path="/login"
           element={
             isLoggedIn ? (
-              // 로그인 되어있으면 로그인 화면 못 보게 -> 원하는 첫 화면으로 보내기
-              <Navigate to="/press" replace />
+              // 로그인 되어있으면 로그인 화면 못 보게 -> 메인 대시보드로 보내기
+              <Navigate to="/dashboard" replace />
             ) : (
               <LoginPage onLogin={handleLogin} />
             )
@@ -100,7 +100,7 @@ export default function App() {
 
         <Route
           path="/signup"
-          element={isLoggedIn ? <Navigate to="/press" replace /> : <SignupPage />}
+          element={isLoggedIn ? <Navigate to="/dashboard" replace /> : <SignupPage />}
         />
 
         {/* Protected Routes */}
@@ -111,7 +111,7 @@ export default function App() {
               <Layout username={username} onLogout={handleLogout}>
                 <Routes>
                   {/* 공정확인 */}
-                  <Route path="/" element={<MainDashboard />} />
+                  <Route path="/dashboard" element={<MainDashboard />} />
                   <Route path="/press" element={<PressMachineDashboard />} />
                   <Route path="/welding-image" element={<WeldingImageDashboard />} />
                   <Route path="/windshield" element={<WindShieldDashboard />} />
@@ -139,7 +139,7 @@ export default function App() {
                   <Route path="/privacy" element={<PrivacyPolicyPage />} />
 
                   {/* 없는 경로 처리 */}
-                  <Route path="*" element={<Navigate to="/press" replace />} />
+                  <Route path="*" element={<Navigate to="/dashboard" replace />} />
                 </Routes>
               </Layout>
             </ProtectedRoute>

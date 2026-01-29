@@ -34,3 +34,5 @@ build/
 
 ### Local config ###
 application-local.properties
+
+main\resources\application.properties

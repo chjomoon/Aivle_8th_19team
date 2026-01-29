@@ -59,6 +59,12 @@ ml-service/temp
 ml-service/welding_image/runs
 ml-service/welding_image/sample_images
 
-
 # Node
 node_modules/
+
+# package
+frontend/package-lock.json
+
+# backend
+backend/src/main/resources/application.properties
+backend/src/main/resources/application-local.properties

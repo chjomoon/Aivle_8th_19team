@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { orderProductionsApi, OrderProductionDto } from "../../api/orderProductions";
 import { productionApi, ProductionDto } from "../../api/production";
+import { orderApi, OrderDto } from "../../api/order";
 
 function pid(p: any) {
   return p?.id ?? p?.productionId ?? p?._id;
@@ -20,6 +21,7 @@ function isProductionInProgress(p: any) {
 export function ProcessPage() {
   const [ops, setOps] = useState<OrderProductionDto[]>([]);
   const [productions, setProductions] = useState<ProductionDto[]>([]);
+  const [orders, setOrders] = useState<OrderDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -27,9 +29,14 @@ export function ProcessPage() {
     setErr(null);
     setLoading(true);
     try {
-      const [opList, prodList] = await Promise.all([orderProductionsApi.list(), productionApi.list()]);
+      const [opList, prodList, orderList] = await Promise.all([
+        orderProductionsApi.list(),
+        productionApi.list(),
+        orderApi.list()
+      ]);
       setOps(Array.isArray(opList) ? opList : []);
       setProductions(Array.isArray(prodList) ? prodList : []);
+      setOrders(Array.isArray(orderList) ? orderList : []);
     } catch (e: any) {
       setErr(e?.message ?? "공정 조회 실패");
     } finally {
@@ -41,12 +48,37 @@ export function ProcessPage() {
     refresh();
   }, []);
 
+  // 페이지가 다시 보여질 때마다 자동 새로고침
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        refresh();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
   // productionId -> production
   const prodMap = useMemo(() => {
     const m = new Map<string, ProductionDto>();
     for (const p of productions) m.set(String(pid(p)), p);
     return m;
   }, [productions]);
+
+  // orderId -> order
+  const orderMap = useMemo(() => {
+    const m = new Map<string, OrderDto>();
+    for (const o of orders) {
+      const id = o?.id ?? o?.orderId;
+      m.set(String(id), o);
+    }
+    return m;
+  }, [orders]);
 
   const inProgress = useMemo(() => {
     return ops.filter((op) => {
@@ -68,14 +100,19 @@ export function ProcessPage() {
     const opId = op?.orderProductionId ?? op?.id ?? op?._id;
     const orderId = op?.orderId ?? op?.order?.id ?? op?.order_id;
     const prodId = op?.productionId ?? op?.production?.id ?? op?.production_id;
+    const allocatedQty = op?.allocatedQty ?? 0;
     const prod = prodMap.get(String(prodId));
     const prodStatus = prod ? (prod?.status ?? prod?.productionStatus ?? "-") : "-";
+    const order = orderMap.get(String(orderId));
+    const vehicleModelId = order ? (order?.vehicleModelId ?? order?.modelId ?? "-") : "-";
 
     return (
       <div key={String(opId)} className="p-3 rounded-lg border mb-2">
-        <div className="font-semibold text-slate-900">할당 #{opId}</div>
+        <div className="font-semibold text-slate-900">
+          할당 #{opId} · 주문 #{orderId} → 생산 #{prodId}
+        </div>
         <div className="text-xs text-slate-500 mt-1">
-          주문ID: {String(orderId)} · 생산ID: {String(prodId)} · 생산상태: {String(prodStatus)}
+          차량모델: {vehicleModelId} · 할당수량: {allocatedQty}대 · 생산상태: {String(prodStatus)}
         </div>
       </div>
     );

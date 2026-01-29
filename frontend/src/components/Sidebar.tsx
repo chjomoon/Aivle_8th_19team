@@ -41,7 +41,7 @@ export function Sidebar({ username, onLogout }: SidebarProps) {
   // ✅ 메뉴 2세트
   const processMenuItems = useMemo(
     () => [
-      { path: "/", label: "메인 대시보드", icon: LayoutDashboard },
+      { path: "/dashboard", label: "메인 대시보드", icon: LayoutDashboard },
       { path: "/press", label: "프레스 머신", icon: Factory },
       { path: "/welding-image", label: "용접(이미지)", icon: Factory },
       { path: "/windshield", label: "윈드실드", icon: ShieldCheck },
@@ -66,8 +66,7 @@ export function Sidebar({ username, onLogout }: SidebarProps) {
 
   // ✅ 선택 상태 계산 (현재 path가 하위 라우트면 active)
   const isActive = (itemPath: string) => {
-    if (itemPath === "/") return location.pathname === "/";
-    return location.pathname === itemPath || location.pathname.startsWith(itemPath + "/") || location.pathname.startsWith(itemPath);
+    return location.pathname === itemPath || location.pathname.startsWith(itemPath + "/");
   };
 
   // ✅ 모드 전환 버튼
@@ -77,7 +76,7 @@ export function Sidebar({ username, onLogout }: SidebarProps) {
       navigate("/order/orders");
     } else {
       setMode("process");
-      navigate("/");
+      navigate("/dashboard");
     }
   };
 

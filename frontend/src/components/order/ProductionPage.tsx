@@ -29,6 +29,7 @@ function getField(o: any, keys: string[], fallback = "-") {
 export function ProductionPage() {
   const [productions, setProductions] = useState<ProductionDto[]>([]);
   const [orders, setOrders] = useState<OrderDto[]>([]);
+  const [orderProductions, setOrderProductions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -41,9 +42,14 @@ export function ProductionPage() {
     setErr(null);
     setLoading(true);
     try {
-      const [p, o] = await Promise.all([productionApi.list(), orderApi.list()]);
+      const [p, o, op] = await Promise.all([
+        productionApi.list(),
+        orderApi.list(),
+        orderProductionsApi.list()
+      ]);
       setProductions(Array.isArray(p) ? p : []);
       setOrders(Array.isArray(o) ? o : []);
+      setOrderProductions(Array.isArray(op) ? op : []);
     } catch (e: any) {
       setErr(e?.message ?? "조회 실패");
     } finally {
@@ -73,6 +79,17 @@ export function ProductionPage() {
   const before = useMemo(() => productions.filter(isBeforeStart), [productions]);
   const ing = useMemo(() => productions.filter(isInProgress), [productions]);
   const done = useMemo(() => productions.filter(isDone), [productions]);
+
+  // 주문별 할당된 수량 계산
+  const orderAllocations = useMemo(() => {
+    const map = new Map<string, number>();
+    orderProductions.forEach((op) => {
+      const orderId = String(op?.orderId ?? op?.order?.id);
+      const qty = op?.allocatedQty ?? 0;
+      map.set(orderId, (map.get(orderId) || 0) + qty);
+    });
+    return map;
+  }, [orderProductions]);
 
   const start = async (id: any) => {
     try {
@@ -122,6 +139,16 @@ export function ProductionPage() {
     }
   };
 
+  // 할당 해제
+  const deallocate = async (opId: any) => {
+    try {
+      await orderProductionsApi.remove(opId);
+      await refresh();
+    } catch (e: any) {
+      setErr(e?.message ?? "할당 해제 실패");
+    }
+  };
+
   return (
     <div className="p-6 space-y-4">
       <div>
@@ -141,9 +168,12 @@ export function ProductionPage() {
               <option value="">선택...</option>
               {orders.map((o) => {
                 const id = o?.id ?? o?.orderId;
+                const orderQty = Number(getField(o, ["orderQty", "quantity", "count"], "0"));
+                const allocated = orderAllocations.get(String(id)) || 0;
+                const remaining = orderQty - allocated;
                 return (
                   <option key={String(id)} value={String(id)}>
-                    #{id} / 모델 {getField(o, ["vehicleModelId", "modelId"])} / {getField(o, ["orderQty", "quantity", "count"])}대
+                    #{id} / 모델 {getField(o, ["vehicleModelId", "modelId"])} / 총 {orderQty}대 (할당 {allocated}, 남음 {remaining})
                   </option>
                 );
               })}
@@ -265,6 +295,45 @@ export function ProductionPage() {
                 </div>
               );
             })
+          )}
+        </div>
+      </div>
+
+      {/* 할당 목록 */}
+      <div className="bg-white rounded-xl border p-4">
+        <div className="text-sm font-semibold">주문-생산 할당 목록 ({orderProductions.length})</div>
+        <div className="mt-3">
+          {loading ? (
+            <div className="text-sm text-slate-500">불러오는 중...</div>
+          ) : orderProductions.length === 0 ? (
+            <div className="text-sm text-slate-500">할당된 항목이 없습니다.</div>
+          ) : (
+            <div className="space-y-2">
+              {orderProductions.map((op) => {
+                const opId = op?.id ?? op?.orderProductionId;
+                const orderId = op?.orderId ?? op?.order?.id;
+                const productionId = op?.productionId ?? op?.production?.id;
+                const qty = op?.allocatedQty ?? 0;
+                return (
+                  <div key={String(opId)} className="flex items-center justify-between gap-3 p-3 rounded-lg border">
+                    <div className="text-sm min-w-0">
+                      <div className="font-semibold text-slate-900">
+                        주문 #{orderId} → 생산 #{productionId}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-1">
+                        할당수량: {qty}대 · 할당ID: #{opId}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => deallocate(opId)}
+                      className="px-3 py-1.5 rounded-lg border border-red-300 text-red-700 text-sm hover:bg-red-50"
+                    >
+                      할당해제
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       </div>
