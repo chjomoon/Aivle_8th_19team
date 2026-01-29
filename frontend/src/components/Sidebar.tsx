@@ -134,7 +134,7 @@ export function Sidebar({ username, onLogout }: SidebarProps) {
           className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors mb-3"
         >
           <ArrowLeftRight className="w-5 h-5" />
-          <span>{mode === "process" ? "주문생산으로 이동하기" : "공정확인으로 이동하기"}</span>
+          <span>{mode === "process" ? "주문생산으로 이동" : "이상탐지로 이동"}</span>
         </button>
 
         {/* Logout */}
