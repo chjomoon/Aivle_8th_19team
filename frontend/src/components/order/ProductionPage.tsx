@@ -153,7 +153,6 @@ export function ProductionPage() {
     <div className="p-6 space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">생산</h1>
-        <p className="text-slate-500 mt-1">/api/v1/production + /api/v1/order-productions 연동</p>
       </div>
 
       {err && <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-sm">{err}</div>}
