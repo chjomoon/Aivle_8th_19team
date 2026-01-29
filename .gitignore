@@ -47,3 +47,18 @@ venv
 
 # ML models
 *.keras
+
+# Image
+model/detect/val_predictions/
+ml-service/body_assembly/runs
+ml-service/body_assembly/samples
+ml-service/paint/detect
+ml-service/paint/sample_images
+ml-service/press/sample_images
+ml-service/temp
+ml-service/welding_image/runs
+ml-service/welding_image/sample_images
+
+
+# Node
+node_modules/
