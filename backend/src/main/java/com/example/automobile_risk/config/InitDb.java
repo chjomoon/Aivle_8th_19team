@@ -1,7 +1,11 @@
 package com.example.automobile_risk.config;
 
 import com.example.automobile_risk.entity.*;
+import com.example.automobile_risk.entity.enumclass.EventSource;
+import com.example.automobile_risk.entity.enumclass.EventType;
 import com.example.automobile_risk.entity.enumclass.Unit;
+import com.example.automobile_risk.repository.DelayRuleRepository;
+import com.example.automobile_risk.repository.ProcessEventRepository;
 import com.example.automobile_risk.repository.VehicleModelRepository;
 import com.example.automobile_risk.service.ManufacturingOrchestrationService;
 import jakarta.annotation.PostConstruct;
@@ -26,6 +30,7 @@ public class InitDb {
     public void init() {
         initService.vehicleModelDbInit();
         initService.OrderAndProductionDbInit();
+        initService.delayPredictionDbInit();
     }
 
     @Component
@@ -36,6 +41,8 @@ public class InitDb {
         private final EntityManager em;
         private final ManufacturingOrchestrationService manufacturingOrchestrationService;
         private final VehicleModelRepository vehicleModelRepository;
+        private final DelayRuleRepository delayRuleRepository;
+        private final ProcessEventRepository processEventRepository;
 
         public void vehicleModelDbInit() {
 
@@ -287,6 +294,69 @@ public class InitDb {
         }
 
         public void OrderAndProductionDbInit() {
+        }
+
+        public void delayPredictionDbInit() {
+            // Skip if seed data already exists
+            if (delayRuleRepository.count() > 0) {
+                log.info("Delay rule seed data already exists, skipping delayPredictionDbInit");
+                return;
+            }
+
+            String defaultWeights = "{\"0\":0.5,\"1\":1.0,\"2\":1.6,\"3\":2.5}";
+
+            /**
+             *  지연 규칙
+             */
+            delayRuleRepository.save(DelayRule.create("press_minor", "press", 1.0, 0.5, 2.0, defaultWeights, 1.5, 1.3, 50, 1.2, true));
+            delayRuleRepository.save(DelayRule.create("press_major", "press", 4.0, 2.0, 8.0, defaultWeights, 2.0, 1.5, 30, 1.4, true));
+            delayRuleRepository.save(DelayRule.create("welding_crack", "welding", 3.0, 1.5, 6.0, defaultWeights, 1.8, 1.4, 20, 1.3, true));
+            delayRuleRepository.save(DelayRule.create("welding_spatter", "welding", 1.5, 0.5, 3.0, defaultWeights, 1.3, 1.2, 40, 1.1, true));
+            delayRuleRepository.save(DelayRule.create("paint_orange_peel", "paint", 2.5, 1.0, 5.0, defaultWeights, 1.6, 1.4, 25, 1.3, true));
+            delayRuleRepository.save(DelayRule.create("paint_scratch", "paint", 1.5, 0.5, 3.0, defaultWeights, 1.3, 1.2, 40, 1.1, true));
+            delayRuleRepository.save(DelayRule.create("body_gap", "body", 2.0, 1.0, 4.0, defaultWeights, 1.5, 1.3, 30, 1.2, true));
+            delayRuleRepository.save(DelayRule.create("engine_vibration", "engine", 3.5, 1.5, 7.0, defaultWeights, 2.0, 1.5, 15, 1.4, true));
+            delayRuleRepository.save(DelayRule.create("windshield_crack", "windshield", 2.0, 1.0, 4.0, defaultWeights, 1.5, 1.3, 20, 1.2, true));
+
+            log.info("Delay rules seeded: 9 rules");
+
+            /**
+             *  샘플 공정 이벤트
+             */
+            // order1, order2 를 조회
+            List<Order> orders = em.createQuery("select o from Order o order by o.id asc", Order.class)
+                    .getResultList();
+
+            if (orders.size() >= 2) {
+                Order order1 = orders.get(0);
+                Order order2 = orders.get(1);
+
+                // order1: press_minor (severity=1, resolved, qty=10), welding_crack (severity=2, unresolved, lineHold, qty=5)
+                processEventRepository.save(ProcessEvent.create(
+                        order1, "press", EventType.DEFECT, "press_minor", 1,
+                        LocalDateTime.now().minusHours(12), LocalDateTime.now().minusHours(6),
+                        10, false, EventSource.SENSOR
+                ));
+                processEventRepository.save(ProcessEvent.create(
+                        order1, "welding", EventType.BREAKDOWN, "welding_crack", 2,
+                        LocalDateTime.now().minusHours(3), null,
+                        5, true, EventSource.VISION
+                ));
+
+                // order2: paint_orange_peel (severity=1, resolved, qty=15), engine_vibration (severity=2, unresolved, qty=8)
+                processEventRepository.save(ProcessEvent.create(
+                        order2, "paint", EventType.DEFECT, "paint_orange_peel", 1,
+                        LocalDateTime.now().minusHours(8), LocalDateTime.now().minusHours(2),
+                        15, false, EventSource.OPERATOR
+                ));
+                processEventRepository.save(ProcessEvent.create(
+                        order2, "engine", EventType.BREAKDOWN, "engine_vibration", 2,
+                        LocalDateTime.now().minusHours(4), null,
+                        8, false, EventSource.SENSOR
+                ));
+
+                log.info("Sample process events seeded: 4 events for order1 and order2");
+            }
         }
 
         private static VehicleModel createVehicleModel(String modelName, String segment, String fuel, String description, boolean isActive) {

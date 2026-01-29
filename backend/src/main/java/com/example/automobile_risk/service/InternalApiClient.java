@@ -19,7 +19,8 @@ public class InternalApiClient {
             "/api/v1/vehicle-model",
             "/api/v1/part",
             "/api/v1/bom",
-            "/api/v1/board"
+            "/api/v1/board",
+            "/api/v1/delay-prediction"
     );
 
     private static final int MAX_RESPONSE_LENGTH = 8000;

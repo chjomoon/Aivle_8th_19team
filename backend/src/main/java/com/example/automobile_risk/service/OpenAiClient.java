@@ -73,7 +73,9 @@ public class OpenAiClient {
                                 "/api/v1/vehicle-model (vehicle models), " +
                                 "/api/v1/part (parts), " +
                                 "/api/v1/bom (bill of materials), " +
-                                "/api/v1/board (bulletin board)")
+                                "/api/v1/board (bulletin board), " +
+                                "/api/v1/delay-prediction/orders/{orderId} (delay prediction for specific order), " +
+                                "/api/v1/delay-prediction/overview (delay prediction overview for all orders)")
                         .parameters(parameters)
                         .build())
                 .build();

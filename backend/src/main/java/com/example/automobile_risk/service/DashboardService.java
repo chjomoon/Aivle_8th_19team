@@ -4,15 +4,18 @@ import com.example.automobile_risk.dto.DashboardResponse;
 import com.example.automobile_risk.entity.Anomaly;
 import com.example.automobile_risk.entity.DashboardHistory;
 import com.example.automobile_risk.entity.ProcessEntity;
+import com.example.automobile_risk.entity.enumclass.RiskLevel;
 import com.example.automobile_risk.repository.AnomalyRepository;
 import com.example.automobile_risk.repository.DashboardHistoryRepository;
 import com.example.automobile_risk.repository.ProcessRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class DashboardService {
@@ -20,6 +23,7 @@ public class DashboardService {
     private final ProcessRepository processRepository;
     private final AnomalyRepository anomalyRepository;
     private final DashboardHistoryRepository historyRepository;
+    private final DelayPredictionService delayPredictionService;
 
     public DashboardResponse getMainDashboardData() {
         List<ProcessEntity> processes = processRepository.findAll();
@@ -30,8 +34,26 @@ public class DashboardService {
         int totalAnomalies = anomalies.stream().mapToInt(Anomaly::getCount).sum();
         int totalWarnings = warnings.stream().mapToInt(Anomaly::getCount).sum();
 
-        double totalDelayHours = anomalies.stream().mapToDouble(a -> a.getCount() * a.getAvgDelay()).sum() +
+        double legacyDelayHours = anomalies.stream().mapToDouble(a -> a.getCount() * a.getAvgDelay()).sum() +
                 warnings.stream().mapToDouble(w -> w.getCount() * w.getAvgDelay()).sum();
+
+        double totalDelayHours;
+        String overallRiskLevel = null;
+        try {
+            double predictedDelay = delayPredictionService.getTotalPredictedDelay();
+            if (predictedDelay > 0) {
+                totalDelayHours = predictedDelay;
+                if (predictedDelay < 4) overallRiskLevel = RiskLevel.LOW.name();
+                else if (predictedDelay < 12) overallRiskLevel = RiskLevel.MEDIUM.name();
+                else if (predictedDelay < 48) overallRiskLevel = RiskLevel.HIGH.name();
+                else overallRiskLevel = RiskLevel.CRITICAL.name();
+            } else {
+                totalDelayHours = legacyDelayHours;
+            }
+        } catch (Exception e) {
+            log.warn("Failed to get predicted delay, falling back to legacy calculation", e);
+            totalDelayHours = legacyDelayHours;
+        }
 
         List<DashboardResponse.AnomalyData> anomalyData = anomalies.stream()
                 .map(a -> DashboardResponse.AnomalyData.builder()
@@ -82,6 +104,7 @@ public class DashboardService {
                 .productionEfficiency(94.2)
                 .historyData(historyData)
                 .processStats(processStats)
+                .overallRiskLevel(overallRiskLevel)
                 .build();
     }
 }

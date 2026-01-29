@@ -53,6 +53,12 @@ public class ChatbotService {
             - "안녕" → "안녕하세요! 무엇을 도와드릴까요?" (API 호출 X)
             - "도장 품질 어디서 봐?" → "도장 품질은 왼쪽 사이드바의 '도장 품질' 메뉴에서 확인할 수 있습니다. (/paint)" (API 호출 X)
             - "현재 이상 건수 알려줘" → API 호출 후 데이터 기반 답변
+
+            ## 지연 예측 기능
+            이 시스템에는 규칙 기반 납기 지연 예측 기능이 있습니다.
+            - /api/v1/delay-prediction/orders/{orderId} : 특정 주문의 지연 예측 (공정별 분석, 리스크 수준, 이벤트 상세)
+            - /api/v1/delay-prediction/overview : 전체 주문의 지연 예측 개요 (리스크 분포, 평균/최대 지연)
+            사용자가 "지연 예측", "납기 리스크", "주문 N번 지연" 등을 물어보면 위 API를 호출하여 답변합니다.
             """;
 
     private final OpenAiClient openAiClient;

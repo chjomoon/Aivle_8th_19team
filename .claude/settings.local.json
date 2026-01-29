@@ -15,7 +15,9 @@
       "Bash(git rebase:*)",
       "Bash(GIT_EDITOR=true git rebase:*)",
       "Bash(npm install)",
-      "Bash(timeout 10 npm run dev:*)"
+      "Bash(timeout 10 npm run dev:*)",
+      "Bash(./gradlew build:*)",
+      "Bash(git status:*)"
     ]
   }
 }

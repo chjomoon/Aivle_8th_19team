@@ -11,6 +11,7 @@ interface DashboardData {
   originalDeadline: string;
   overallEfficiency: number;
   productionEfficiency: number;
+  overallRiskLevel?: string;
 }
 
 export function MainDashboard() {
@@ -51,6 +52,19 @@ export function MainDashboard() {
 
   // 납기 상태 결정
   const getDeliveryStatus = () => {
+    const riskLevel = data.overallRiskLevel;
+    if (riskLevel) {
+      switch (riskLevel) {
+        case 'LOW':
+          return { status: '안전', color: 'green', icon: 'bg-green-100', textColor: 'text-green-600' };
+        case 'MEDIUM':
+          return { status: '주의', color: 'yellow', icon: 'bg-yellow-100', textColor: 'text-yellow-600' };
+        case 'HIGH':
+          return { status: '위험', color: 'red', icon: 'bg-red-100', textColor: 'text-red-600' };
+        case 'CRITICAL':
+          return { status: '심각', color: 'red', icon: 'bg-red-100', textColor: 'text-red-800' };
+      }
+    }
     if (totalDelayHours < 24) return { status: '안전', color: 'green', icon: 'bg-green-100', textColor: 'text-green-600' };
     if (totalDelayHours < 72) return { status: '주의', color: 'yellow', icon: 'bg-yellow-100', textColor: 'text-yellow-600' };
     return { status: '위험', color: 'red', icon: 'bg-red-100', textColor: 'text-red-600' };

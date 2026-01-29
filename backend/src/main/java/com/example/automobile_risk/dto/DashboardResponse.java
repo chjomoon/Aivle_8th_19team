@@ -19,6 +19,7 @@ public class DashboardResponse {
     private Double productionEfficiency;
     private List<HistoryData> historyData;
     private List<ProcessStat> processStats;
+    private String overallRiskLevel;
 
     @Getter
     @Setter
