@@ -141,6 +141,9 @@ public class DelayPredictionService {
                     .riskLevel(prediction.getRiskLevel())
                     .eventCount(prediction.getEventCount())
                     .topContributorCode(prediction.getTopContributorCode())
+                    .orderDate(order.getOrderDate())
+                    .dueDate(order.getDueDate())
+                    .vehicleModelName(order.getVehicleModel().getModelName())
                     .build());
 
             riskDistribution.merge(prediction.getRiskLevel(), 1, Integer::sum);

@@ -2,6 +2,7 @@ package com.example.automobile_risk.service.dto;
 
 import lombok.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -27,5 +28,8 @@ public class DelayPredictionOverviewResponse {
         private String riskLevel;
         private int eventCount;
         private String topContributorCode;
+        private LocalDateTime orderDate;
+        private LocalDateTime dueDate;
+        private String vehicleModelName;
     }
 }
