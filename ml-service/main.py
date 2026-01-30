@@ -185,14 +185,10 @@ async def predict_welding_original(file: UploadFile = File(...)):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-# ✅ 자동 입력(폴더 순차) - offset 지원
+# ✅ 자동 입력(폴더 순차)
 @app.post("/api/v1/smartfactory/welding/image/auto")
-async def predict_welding_auto(offset: int = 0):
+async def predict_welding_auto():
     try:
-        # offset > 0이면 추가로 이미지 건너뛰기 (재검사 시 다른 이미지 사용)
-        for _ in range(offset):
-            welding_image.skip_to_next_image()
-
         # result = {"status","defects","result_image_path", "source","sequence","original_image_path"}
         result = welding_image.predict_welding_image_auto()
 
@@ -254,14 +250,10 @@ async def predict_paint_endpoint(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
     
 @app.post("/api/v1/smartfactory/paint/auto")
-def predict_paint_auto(offset: int = 0):
+def predict_paint_auto():
     try:
         if PAINT_CFG is None:
             raise HTTPException(status_code=500, detail="paint config not initialized")
-
-        # offset > 0이면 추가로 이미지 건너뛰기 (재검사 시 다른 이미지 사용)
-        for _ in range(offset):
-            paint_service.skip_to_next_image()
 
         result = paint_service.predict_paint_defect_auto(
             base_dir=BASE_DIR,
@@ -278,23 +270,19 @@ def predict_paint_auto(offset: int = 0):
         raise HTTPException(status_code=500, detail=str(e))
     
 # =========================
-# PRESS APIs (SIM INPUT) - offset 지원
+# PRESS APIs (SIM INPUT)
 # =========================
 @app.post("/api/v1/smartfactory/press/vibration")
-def predict_press_vibration(offset: int = 0):
+def predict_press_vibration():
     try:
-        # offset은 vibration 시뮬에서는 의미가 덜하지만 일관성을 위해 수용
         return press.predict_vibration_anomaly_sim()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/v1/smartfactory/press/image")
-async def predict_press_image(offset: int = 0):
+async def predict_press_image():
     try:
-        # offset > 0이면 추가로 이미지 건너뛰기
-        for _ in range(offset):
-            press.skip_to_next_image()
         return await press.predict_press_image_sim()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -420,18 +408,11 @@ async def body_inspect_auto(
 @app.post("/api/v1/smartfactory/body/inspect/batch/auto")
 async def body_inspect_batch_auto(
     conf: float = Form(0.25),
-    offset: int = 0,
 ):
     """
     5개 파트 모두 samples에서 자동으로 하나씩 꺼내서 배치 검사
-    offset > 0이면 각 파트의 이미지를 건너뛰어 다른 이미지 사용
     """
     try:
-        # offset만큼 각 파트의 이미지 건너뛰기
-        for _ in range(offset):
-            for part in ["door", "bumper", "headlamp", "taillamp", "radiator"]:
-                body_service.skip_to_next_image(part)
-
         results = {}
         for part in ["door", "bumper", "headlamp", "taillamp", "radiator"]:
             try:
@@ -455,6 +436,109 @@ async def body_inspect_batch_auto(
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =========================
+# 납기 예측 API (Delay Prediction API)
+# =========================
+# 주문의 공정 이상이 누적될 경우 최종 납기가 지연될 확률과 예상 지연 시간 예측
+
+@app.post("/api/v1/prediction/extract-and-train")
+async def extract_and_train():
+    """
+    데이터베이스에서 데이터를 추출하고 납기 예측 모델을 훈련합니다.
+    
+    Returns:
+        {
+            "status": "success" | "error",
+            "message": "훈련 완료 또는 오류 메시지",
+            "model_metrics": {
+                "classification": {...},
+                "regression": {...}
+            }
+        }
+    """
+    try:
+        from .delay_prediction_model import DelayPredictionModel
+        from .data_extraction import DelayDataExtractor
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        
+        # 데이터 추출
+        db_url = os.getenv('DATABASE_URL', 'postgresql://user:password@localhost:5432/automobile_risk')
+        extractor = DelayDataExtractor(db_url)
+        features, targets = extractor.extract_and_engineer()
+        
+        # 모델 훈련
+        model = DelayPredictionModel()
+        metrics = model.train(features, targets['delay_flag'], targets['delay_hours'])
+        
+        # 모델 저장
+        model.save_model('delay_prediction_model.pkl')
+        
+        return {
+            "status": "success",
+            "message": "납기 예측 모델 훈련 완료",
+            "samples": len(features),
+            "features": features.shape[1],
+            "model_metrics": metrics
+        }
+    except Exception as e:
+        logger.error(f"모델 훈련 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/prediction/model-info")
+async def get_model_info():
+    """
+    현재 훈련된 모델의 정보를 조회합니다.
+    
+    Returns:
+        {
+            "model_version": "1.0.0",
+            "last_trained": "2026-01-31T10:30:00",
+            "features": 84,
+            "targets": ["delay_flag", "delay_hours"],
+            "evaluation": {...}
+        }
+    """
+    try:
+        from .delay_prediction_model import DelayPredictionModel
+        
+        model = DelayPredictionModel()
+        
+        # 모델 파일이 있으면 로드
+        if os.path.exists('delay_prediction_model.pkl'):
+            model.load_model('delay_prediction_model.pkl')
+            return {
+                "status": "success",
+                "model_version": "1.0.0",
+                "model_loaded": True,
+                "message": "모델이 로드되었습니다"
+            }
+        else:
+            return {
+                "status": "info",
+                "model_version": "1.0.0",
+                "model_loaded": False,
+                "message": "훈련된 모델이 없습니다. /api/v1/prediction/extract-and-train을 호출하세요"
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/health")
+async def health_check():
+    """
+    ML 서비스 헬스 체크
+    """
+    return {
+        "status": "healthy",
+        "service": "ML Service API",
+        "version": "1.0.0",
+        "timestamp": str(__import__('datetime').datetime.now())
+    }
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

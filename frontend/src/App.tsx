@@ -19,6 +19,7 @@ import { ProductionPage } from "./components/order/ProductionPage";
 import { ProcessPage } from "./components/order/ProcessPage";
 import { TermsOfServicePage } from './components/TermsOfServicePage';
 import { PrivacyPolicyPage } from './components/PrivacyPolicyPage';
+import { ProductionProvider } from "./context/ProductionContext";
 
 
 function Layout({
@@ -108,6 +109,7 @@ export default function App() {
           path="/*"
           element={
             <ProtectedRoute isLoggedIn={isLoggedIn}>
+            <ProductionProvider>
               <Layout username={username} onLogout={handleLogout}>
                 <Routes>
                   {/* 공정확인 */}
@@ -142,7 +144,8 @@ export default function App() {
                   <Route path="*" element={<Navigate to="/dashboard" replace />} />
                 </Routes>
               </Layout>
-            </ProtectedRoute>
+            </ProductionProvider>
+          </ProtectedRoute>
           }
         />
       </Routes>

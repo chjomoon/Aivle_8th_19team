@@ -68,6 +68,7 @@ type ProductionItem = {
   stageResults: StageResult[];
   startedAt?: string;
   completedAt?: string;
+  baseOffset?: number; // 주문별 랜덤 시작 오프셋
 };
 
 // ML API 호출 함수
@@ -158,6 +159,10 @@ export function ProductionProvider({ children }: { children: ReactNode }) {
 
     runningProductions.current.add(orderId);
 
+    // 주문별 랜덤 시작 오프셋 생성 (0~99 사이)
+    const baseOffset = Math.floor(Math.random() * 100);
+    console.log(`Production ${orderId}: Starting with base offset ${baseOffset}`);
+
     // 시작 상태로 변경
     setProductions((prev) => {
       const newMap = new Map(prev);
@@ -165,12 +170,11 @@ export function ProductionProvider({ children }: { children: ReactNode }) {
       if (production) {
         production.stageResults[0] = { status: "running" };
         production.startedAt = new Date().toISOString();
+        production.baseOffset = baseOffset;
         newMap.set(orderId, { ...production });
       }
       return newMap;
     });
-
-    const MAX_RETRIES = 5; // 최대 재시도 횟수
 
     // 각 공정을 순차적으로 실행
     for (let stageIdx = 0; stageIdx < PIPELINE_STAGES.length; stageIdx++) {
@@ -178,12 +182,15 @@ export function ProductionProvider({ children }: { children: ReactNode }) {
       let retryCount = 0;
       let stageSuccess = false;
 
-      // 이상 감지 시 자동 재시도 (최대 MAX_RETRIES번)
-      while (!stageSuccess && retryCount < MAX_RETRIES) {
-        const stageDuration = stage.duration.min + Math.random() * (stage.duration.max - stage.duration.min);
-        const stageStartTime = Date.now();
+      // 공정 시작 시간 (재시도해도 유지)
+      const stageStartTime = Date.now();
 
-        // 현재 단계 실행중으로 표시
+      // 이상 감지 시 자동 재시도 (정상이 될 때까지 무한 재시도)
+      while (!stageSuccess) {
+        const stageDuration = stage.duration.min + Math.random() * (stage.duration.max - stage.duration.min);
+        const retryStartTime = Date.now(); // 이번 시도의 시작 시간 (대기 시간 계산용)
+
+        // 현재 단계 실행중으로 표시 (startedAt은 최초 시작 시간 유지)
         setProductions((prev) => {
           const newMap = new Map(prev);
           const production = newMap.get(orderId);
@@ -191,7 +198,7 @@ export function ProductionProvider({ children }: { children: ReactNode }) {
             production.currentStage = stageIdx;
             production.stageResults[stageIdx] = {
               status: "running",
-              startedAt: stageStartTime,
+              startedAt: stageStartTime, // 재시도해도 최초 시작 시간 유지
               estimatedDuration: stageDuration,
               retryCount,
             };
@@ -200,14 +207,15 @@ export function ProductionProvider({ children }: { children: ReactNode }) {
           return newMap;
         });
 
-        // ML API 호출
+        // ML API 호출 (baseOffset + stageIdx * 10 + retryCount로 주문별 다른 입력 사용)
         let hasAnomaly = false;
         const mlResults: any[] = [];
+        const totalOffset = baseOffset + stageIdx * 10 + retryCount;
 
         if (stage.mlEndpoints.length > 0) {
           for (const endpoint of stage.mlEndpoints) {
             try {
-              const result = await callMLApi(endpoint, retryCount);
+              const result = await callMLApi(endpoint, totalOffset);
               mlResults.push(result);
               if (checkAnomaly(result)) {
                 hasAnomaly = true;
@@ -218,38 +226,18 @@ export function ProductionProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        // 공정 소요 시간 대기
-        const elapsed = Date.now() - stageStartTime;
+        // 공정 소요 시간 대기 (이번 시도 기준)
+        const elapsed = Date.now() - retryStartTime;
         const remainingTime = Math.max(0, stageDuration - elapsed);
         if (remainingTime > 0) {
           await new Promise((resolve) => setTimeout(resolve, remainingTime));
         }
 
         if (hasAnomaly) {
-          // 이상 감지 - 자동 재시도
+          // 이상 감지 - 자동 재시도 (정상이 될 때까지 계속)
           retryCount++;
-          console.log(`Production ${orderId}: Anomaly at ${stage.name}, auto-retry ${retryCount}/${MAX_RETRIES}`);
-
-          if (retryCount >= MAX_RETRIES) {
-            // 최대 재시도 초과 - 그래도 계속 진행 (이상 기록만 하고)
-            console.log(`Production ${orderId}: Max retries reached at ${stage.name}, continuing anyway`);
-            setProductions((prev) => {
-              const newMap = new Map(prev);
-              const production = newMap.get(orderId);
-              if (production) {
-                production.stageResults[stageIdx] = {
-                  status: "completed",
-                  mlResults,
-                  hasAnomaly: true,
-                  message: `이상 감지 (${retryCount}회 재시도 후 계속 진행)`,
-                  retryCount,
-                };
-                newMap.set(orderId, { ...production });
-              }
-              return newMap;
-            });
-            stageSuccess = true;
-          }
+          console.log(`Production ${orderId}: Anomaly at ${stage.name}, auto-retry ${retryCount}`);
+          // 정상이 될 때까지 계속 재시도 (stageSuccess = false 유지)
         } else {
           // 정상 - 다음 단계로
           setProductions((prev) => {

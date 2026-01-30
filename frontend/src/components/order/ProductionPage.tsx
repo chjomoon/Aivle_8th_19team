@@ -1,6 +1,11 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { orderApi, OrderDto } from "../../api/order";
+import {
+  useProduction,
+  PIPELINE_STAGES,
+  ProductionItem,
+  StageResult,
+} from "../../context/ProductionContext";
 import {
   Factory,
   Play,
@@ -19,126 +24,106 @@ import {
   XCircle,
 } from "lucide-react";
 
-// ML API 기본 URL (Spring Boot)
-const ML_API_BASE = "http://localhost:3001/api/v1/ml";
-
-// 공정 단계 정의 (duration: 밀리초 단위 소요 시간)
-const PIPELINE_STAGES = [
-  {
-    id: "press",
-    name: "프레스",
-    icon: Hammer,
-    description: "철판 성형 및 스탬핑",
-    mlEndpoints: ["/press/vibration", "/press/image"],
-    detailPage: "/press",
-    duration: { min: 15000, max: 20000 }, // 15-20초
-  },
-  {
-    id: "body",
-    name: "차체",
-    icon: Car,
-    description: "용접 및 차체 조립",
-    mlEndpoints: ["/welding/image/auto", "/body/inspect/batch/auto"],
-    detailPage: "/body",
-    duration: { min: 25000, max: 35000 }, // 25-35초 (용접은 더 오래 걸림)
-  },
-  {
-    id: "paint",
-    name: "도장",
-    icon: Paintbrush,
-    description: "도장 및 코팅",
-    mlEndpoints: ["/paint/auto"],
-    detailPage: "/paint",
-    duration: { min: 20000, max: 30000 }, // 20-30초
-  },
-  {
-    id: "assembly",
-    name: "의장",
-    icon: Wrench,
-    description: "내장재 및 부품 조립",
-    mlEndpoints: [], // 윈드실드/엔진은 파일 업로드 필요하므로 시뮬레이션
-    detailPage: "/windshield",
-    duration: { min: 15000, max: 25000 }, // 15-25초
-  },
-  {
-    id: "inspection",
-    name: "검사",
-    icon: ClipboardCheck,
-    description: "최종 품질 검사",
-    mlEndpoints: [],
-    detailPage: "/dashboard",
-    duration: { min: 10000, max: 15000 }, // 10-15초
-  },
-];
-
-type StageStatus = "waiting" | "running" | "completed" | "error" | "stopped";
-
-type StageResult = {
-  status: StageStatus;
-  mlResults?: any[];
-  hasAnomaly?: boolean;
-  message?: string;
-  startedAt?: number; // timestamp
-  estimatedDuration?: number; // ms
-  retryCount?: number; // 재시도 횟수 (다른 데이터 사용을 위해)
+// 아이콘 매핑 (Context에서는 아이콘을 저장하지 않으므로)
+const STAGE_ICONS: Record<string, any> = {
+  press: Hammer,
+  body: Car,
+  paint: Paintbrush,
+  assembly: Wrench,
+  inspection: ClipboardCheck,
 };
 
-type ProductionItem = {
-  orderId: number;
-  vehicleModelId: number;
-  orderQty: number;
-  currentStage: number;
-  stageResults: StageResult[];
-  startedAt?: string;
-  completedAt?: string;
-  isStopped?: boolean; // 이상 감지로 중단됨
-};
-
-// ML API 호출 함수 (offset: 몇 번째 데이터를 사용할지)
-async function callMLApi(endpoint: string, offset: number = 0): Promise<any> {
-  try {
-    // offset 파라미터를 추가하여 다른 데이터 사용
-    const separator = endpoint.includes("?") ? "&" : "?";
-    const url = `${ML_API_BASE}${endpoint}${separator}offset=${offset}`;
-    const res = await fetch(url, { method: "POST" });
-    if (!res.ok) throw new Error(`API Error: ${res.status}`);
-    return await res.json();
-  } catch (error) {
-    console.error(`ML API call failed: ${endpoint}`, error);
-    throw error;
-  }
+function formatSecToMMSS(sec: number) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  const mm = String(m).padStart(2, "0");
+  const ss = String(s).padStart(2, "0");
+  return `${mm}:${ss}`;
 }
 
-// ML 결과에서 이상 여부 판단
-function checkAnomaly(result: any): boolean {
-  if (!result) return false;
+/**
+ * ✅ 신호등(초록) 느낌: 깜빡 + 발광(글로우)
+ * Tailwind animate-* 의존 X. CSS keyframes로 확실하게 동작.
+ */
+const trafficCss = `
+@keyframes greenBlinkGlow {
+  0%   { opacity: 0.35; filter: drop-shadow(0 0 0px rgba(34,197,94,0)); }
+  35%  { opacity: 1;    filter: drop-shadow(0 0 6px rgba(34,197,94,0.85)) drop-shadow(0 0 14px rgba(34,197,94,0.55)); }
+  70%  { opacity: 0.55; filter: drop-shadow(0 0 2px rgba(34,197,94,0.35)); }
+  100% { opacity: 0.35; filter: drop-shadow(0 0 0px rgba(34,197,94,0)); }
+}
+.traffic-green {
+  animation: greenBlinkGlow 1.1s ease-in-out infinite;
+}
+`;
 
-  // 다양한 ML 응답 형식 처리
-  if (result.is_anomaly === 1) return true;
-  if (result.status === "DEFECT" || result.status === "FAIL" || result.status === "ABNORMAL") return true;
-  if (result.judgement === "FAIL" || result.judgement === "ABNORMAL") return true;
-  if (result.pass_fail === "FAIL") return true;
-  if (result.prediction === 1) return true;
-
-  // body inspection 결과
-  if (result.results) {
-    const parts = Object.values(result.results);
-    return parts.some((p: any) => p?.pass_fail === "FAIL");
-  }
-
-  return false;
+// ✅ 주문 카드 우측 배지에서 쓰는 "신호등 초록 불" (빛 번짐 포함)
+function TrafficGreenLight({ size = 10 }: { size?: number }) {
+  const px = `${size}px`;
+  return (
+    <span
+      className="relative inline-flex items-center justify-center"
+      style={{ width: px, height: px }}
+      aria-label="running"
+      title="공정 진행 중"
+    >
+      {/* 내부 코어 */}
+      <span
+        className="traffic-green rounded-full"
+        style={{
+          width: px,
+          height: px,
+          background: "rgb(34 197 94)", // green-500
+        }}
+      />
+      {/* 바깥 은은한 글로우 */}
+      <span
+        className="absolute rounded-full"
+        style={{
+          width: `calc(${px} * 2.1)`,
+          height: `calc(${px} * 2.1)`,
+          background:
+            "radial-gradient(circle, rgba(34,197,94,0.35) 0%, rgba(34,197,94,0.10) 45%, rgba(34,197,94,0.0) 70%)",
+          pointerEvents: "none",
+        }}
+      />
+    </span>
+  );
 }
 
-function StageProgressBar({ startedAt, duration }: { startedAt: number; duration: number }) {
+// ✅ 공정 "끝(완료)" 표시용: 안 빛나는 빨간 불빛(고정)
+function TrafficRedLight({ size = 10 }: { size?: number }) {
+  const px = `${size}px`;
+  return (
+    <span
+      className="inline-flex rounded-full"
+      style={{
+        width: px,
+        height: px,
+        background: "rgb(239 68 68)", // red-500
+      }}
+      aria-label="completed"
+      title="공정 완료"
+    />
+  );
+}
+
+function StageProgressBar({
+  startedAt,
+  duration,
+}: {
+  startedAt: number;
+  duration: number;
+}) {
   const [progress, setProgress] = useState(0);
-  const [remainingSec, setRemainingSec] = useState(Math.ceil(duration / 1000));
+  const [elapsedSec, setElapsedSec] = useState(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
       const elapsed = Date.now() - startedAt;
       const pct = Math.min(100, (elapsed / duration) * 100);
       setProgress(pct);
-      setRemainingSec(Math.max(0, Math.ceil((duration - elapsed) / 1000)));
+      setElapsedSec(Math.max(0, Math.floor(elapsed / 1000)));
     }, 100);
 
     return () => clearInterval(interval);
@@ -152,14 +137,45 @@ function StageProgressBar({ startedAt, duration }: { startedAt: number; duration
           style={{ width: `${progress}%` }}
         />
       </div>
-      <span className="text-[9px] text-slate-400">{remainingSec}초</span>
+
+      {/* ✅ 경과 글씨 더 작게 */}
+      <span className="text-[7px] text-slate-400 leading-none">
+        경과 {formatSecToMMSS(elapsedSec)}
+      </span>
     </div>
   );
 }
 
-function StageIcon({ stage, result, isActive }: { stage: typeof PIPELINE_STAGES[0]; result: StageResult; isActive: boolean }) {
-  const Icon = stage.icon;
-  const baseClass = "w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 shadow-md";
+function StageElapsed({ startedAt }: { startedAt: number }) {
+  const [elapsedSec, setElapsedSec] = useState(0);
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      setElapsedSec(Math.max(0, Math.floor(elapsed / 1000)));
+    }, 500);
+    return () => clearInterval(t);
+  }, [startedAt]);
+
+  return (
+    <span className="text-[7px] text-slate-400 leading-none">
+      경과 {formatSecToMMSS(elapsedSec)}
+    </span>
+  );
+}
+
+function StageIcon({
+  stage,
+  result,
+  isActive,
+}: {
+  stage: (typeof PIPELINE_STAGES)[0];
+  result: StageResult;
+  isActive: boolean;
+}) {
+  const Icon = STAGE_ICONS[stage.id] || ClipboardCheck;
+  const baseClass =
+    "w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 shadow-md";
 
   if (result.status === "completed" && !result.hasAnomaly) {
     return (
@@ -175,13 +191,19 @@ function StageIcon({ stage, result, isActive }: { stage: typeof PIPELINE_STAGES[
       </div>
     );
   }
+
+  // 단계 아이콘 running 상태는 기존처럼 유지(우측 상단 신호등 초록불)
   if (result.status === "running") {
     return (
-      <div className={`${baseClass} bg-blue-500 text-white animate-pulse`}>
-        <Loader2 className="w-6 h-6 animate-spin" />
+      <div className={`${baseClass} bg-slate-700 text-white relative`}>
+        <Icon className="w-6 h-6" />
+        <div className="absolute -top-1 -right-1">
+          <TrafficGreenLight size={8} />
+        </div>
       </div>
     );
   }
+
   if (result.status === "error") {
     return (
       <div className={`${baseClass} bg-red-500 text-white`}>
@@ -189,15 +211,11 @@ function StageIcon({ stage, result, isActive }: { stage: typeof PIPELINE_STAGES[
       </div>
     );
   }
-  if (result.status === "stopped") {
-    return (
-      <div className={`${baseClass} bg-orange-500 text-white ring-4 ring-orange-200`}>
-        <AlertTriangle className="w-6 h-6" />
-      </div>
-    );
-  }
+
   return (
-    <div className={`${baseClass} ${isActive ? "bg-slate-300" : "bg-slate-200"} text-slate-500`}>
+    <div
+      className={`${baseClass} ${isActive ? "bg-slate-300" : "bg-slate-200"} text-slate-500`}
+    >
       <Icon className="w-6 h-6" />
     </div>
   );
@@ -208,11 +226,13 @@ function PipelineView({
   onStageClick,
 }: {
   production: ProductionItem;
-  onStageClick: (stageId: string, stage: typeof PIPELINE_STAGES[0]) => void;
+  onStageClick: (stageId: string, stage: (typeof PIPELINE_STAGES)[0]) => void;
 }) {
+  const stages = PIPELINE_STAGES;
+
   return (
     <div className="flex items-center gap-1 overflow-x-auto py-4 px-2">
-      {PIPELINE_STAGES.map((stage, idx) => {
+      {stages.map((stage, idx) => {
         const result = production.stageResults[idx];
         const isActive = idx === production.currentStage;
         const isClickable = result.status !== "waiting";
@@ -226,45 +246,65 @@ function PipelineView({
               onClick={() => isClickable && onStageClick(stage.id, stage)}
             >
               <StageIcon stage={stage} result={result} isActive={isActive} />
-              <div className={`mt-2 text-xs font-semibold ${isActive ? "text-blue-600" : "text-slate-700"}`}>
+
+              <div
+                className={`mt-2 text-xs font-semibold ${
+                  isActive ? "text-blue-600" : "text-slate-700"
+                }`}
+              >
                 {stage.name}
               </div>
-              <div className="text-[10px] text-slate-400 text-center">{stage.description}</div>
+              <div className="text-[10px] text-slate-400 text-center">
+                {stage.description}
+              </div>
 
-              {/* 결과 표시 */}
+              {/* ✅ 결과 표시: "정상" -> "완료" */}
               {result.status === "completed" && (
-                <div className={`mt-1 px-2 py-0.5 rounded text-[10px] font-medium ${
-                  result.hasAnomaly ? "bg-orange-100 text-orange-700" : "bg-green-100 text-green-700"
-                }`}>
-                  {result.hasAnomaly ? "이상 감지" : "정상"}
+                <div
+                  className={`mt-1 px-2 py-0.5 rounded text-[10px] font-medium ${
+                    result.hasAnomaly
+                      ? "bg-orange-100 text-orange-700"
+                      : "bg-green-100 text-green-700"
+                  }`}
+                >
+                  {result.hasAnomaly ? "완료 (이상)" : "완료"}
                 </div>
               )}
+
+              {/* ✅ running: 재시도 문구/횟수 제거 -> 항상 공정 중 */}
               {result.status === "running" && (
                 <div className="mt-1 flex flex-col items-center gap-1">
                   <div className="px-2 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700">
-                    분석중...
+                    공정 중...
                   </div>
-                  {result.estimatedDuration && result.startedAt && (
-                    <StageProgressBar startedAt={result.startedAt} duration={result.estimatedDuration} />
-                  )}
+
+                  {/* ✅ 경과 시간만 작게 표시 */}
+                  {result.estimatedDuration && result.startedAt ? (
+                    <StageProgressBar
+                      startedAt={result.startedAt}
+                      duration={result.estimatedDuration}
+                    />
+                  ) : result.startedAt ? (
+                    <StageElapsed startedAt={result.startedAt} />
+                  ) : null}
                 </div>
               )}
+
               {result.status === "error" && (
                 <div className="mt-1 px-2 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-700">
                   오류
                 </div>
               )}
-              {result.status === "stopped" && (
-                <div className="mt-1 px-2 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-700 animate-pulse">
-                  중단됨
-                </div>
-              )}
             </div>
 
-            {idx < PIPELINE_STAGES.length - 1 && (
+            {idx < stages.length - 1 && (
               <ChevronRight
                 className={`w-5 h-5 mx-1 flex-shrink-0 ${
-                  result.status === "completed" ? (result.hasAnomaly ? "text-orange-400" : "text-green-500") : "text-slate-300"
+                  result.status === "completed"
+                    ? result.hasAnomaly
+                      ? "text-orange-400"
+                      : "text-green-500"
+                    : "text-slate-300"
                 }`}
               />
             )}
@@ -280,33 +320,30 @@ function ProductionCard({
   onStart,
   onStageClick,
   onViewDetail,
-  onRetry,
-  onSkip,
 }: {
   production: ProductionItem;
   onStart: () => void;
-  onStageClick: (stageId: string, stage: typeof PIPELINE_STAGES[0]) => void;
+  onStageClick: (stageId: string, stage: (typeof PIPELINE_STAGES)[0]) => void;
   onViewDetail: (page: string) => void;
-  onRetry: () => void;
-  onSkip: () => void;
 }) {
+  const stages = PIPELINE_STAGES;
   const isRunning = production.stageResults.some((r) => r.status === "running");
-  const isCompleted = production.stageResults.every((r) => r.status === "completed" || r.status === "stopped");
-  const isStopped = production.isStopped && production.stageResults.some((r) => r.status === "stopped");
+  const isCompleted = production.stageResults.every((r) => r.status === "completed");
   const hasAnyAnomaly = production.stageResults.some((r) => r.hasAnomaly);
   const hasError = production.stageResults.some((r) => r.status === "error");
   const isWaiting = production.stageResults.every((r) => r.status === "waiting");
-  const stoppedStageIdx = production.stageResults.findIndex((r) => r.status === "stopped");
 
   return (
-    <div className={`bg-white rounded-xl border shadow-sm overflow-hidden ${isStopped ? "border-orange-400 ring-2 ring-orange-100" : hasAnyAnomaly ? "border-orange-300" : ""}`}>
+    <div
+      className={`bg-white rounded-xl border shadow-sm overflow-hidden ${
+        hasAnyAnomaly ? "border-orange-300" : ""
+      }`}
+    >
       <div className="px-4 py-3 border-b bg-slate-50 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div
             className={`p-2 rounded-lg ${
-              isStopped
-                ? "bg-orange-100"
-                : isCompleted && !hasAnyAnomaly
+              isCompleted && !hasAnyAnomaly
                 ? "bg-green-100"
                 : isCompleted && hasAnyAnomaly
                 ? "bg-orange-100"
@@ -319,9 +356,7 @@ function ProductionCard({
           >
             <Factory
               className={`w-5 h-5 ${
-                isStopped
-                  ? "text-orange-600"
-                  : isCompleted && !hasAnyAnomaly
+                isCompleted && !hasAnyAnomaly
                   ? "text-green-600"
                   : isCompleted && hasAnyAnomaly
                   ? "text-orange-600"
@@ -333,47 +368,40 @@ function ProductionCard({
               }`}
             />
           </div>
+
           <div>
-            <div className="font-semibold text-slate-900">주문 #{production.orderId}</div>
-            <div className="text-xs text-slate-500">모델 {production.vehicleModelId} · {production.orderQty}대</div>
+            <div className="font-semibold text-slate-900">
+              주문 #{production.orderId}
+            </div>
+            <div className="text-xs text-slate-500">
+              모델 {production.vehicleModelId} · {production.orderQty}대
+            </div>
           </div>
         </div>
+
         <div className="flex items-center gap-2">
-          {isStopped ? (
-            <>
-              <span className="px-3 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-700 flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3" />
-                {PIPELINE_STAGES[stoppedStageIdx]?.name} 이상 감지
-              </span>
-              <button
-                onClick={onRetry}
-                className="px-3 py-1.5 text-sm font-medium rounded-lg bg-orange-500 text-white hover:bg-orange-600 flex items-center gap-1"
-              >
-                <RefreshCcw className="w-3 h-3" />
-                재검사
-              </button>
-              <button
-                onClick={onSkip}
-                className="px-3 py-1.5 text-sm font-medium rounded-lg bg-slate-500 text-white hover:bg-slate-600 flex items-center gap-1"
-              >
-                <ChevronRight className="w-3 h-3" />
-                건너뛰기
-              </button>
-            </>
-          ) : isCompleted && !hasAnyAnomaly ? (
-            <span className="px-3 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">생산 완료</span>
+          {/* ✅ 완료(정상/이상)일 때: 배지에 "빨간 불빛(고정)" 추가 */}
+          {isCompleted && !hasAnyAnomaly ? (
+            <span className="px-3 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700 inline-flex items-center gap-2">
+              <TrafficRedLight size={10} />
+              생산 완료
+            </span>
           ) : isCompleted && hasAnyAnomaly ? (
-            <span className="px-3 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-700">
-              이상 감지 ({production.stageResults.filter((r) => r.hasAnomaly).length}건)
+            <span className="px-3 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-700 inline-flex items-center gap-2">
+              <TrafficRedLight size={10} />
+              생산 완료 (이상 {production.stageResults.filter((r) => r.hasAnomaly).length}건)
             </span>
           ) : isRunning ? (
-            <span className="px-3 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700 flex items-center gap-1">
-              <Loader2 className="w-3 h-3 animate-spin" />
-              {PIPELINE_STAGES[production.currentStage]?.name} 분석중
+            // ✅ running: "신호등 초록 불"로 표시
+            <span className="px-3 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700 inline-flex items-center gap-2">
+              <TrafficGreenLight size={10} />
+              {stages[production.currentStage]?.name} 공정 중
             </span>
           ) : hasError ? (
-            <span className="px-3 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">오류 발생</span>
-          ) : (
+            <span className="px-3 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+              오류 발생
+            </span>
+          ) : isWaiting ? (
             <button
               onClick={onStart}
               className="px-4 py-1.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-1"
@@ -381,7 +409,7 @@ function ProductionCard({
               <Play className="w-4 h-4" />
               생산 시작
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -411,11 +439,11 @@ function ProductionCard({
                   r.hasAnomaly ? (
                     <button
                       key={idx}
-                      onClick={() => onViewDetail(PIPELINE_STAGES[idx].detailPage)}
+                      onClick={() => onViewDetail(stages[idx].detailPage)}
                       className="flex items-center gap-1 px-2 py-1 rounded bg-orange-50 text-orange-700 hover:bg-orange-100"
                     >
                       <ExternalLink className="w-3 h-3" />
-                      {PIPELINE_STAGES[idx].name} 상세
+                      {stages[idx].name} 상세
                     </button>
                   ) : null
                 )}
@@ -430,344 +458,13 @@ function ProductionCard({
 
 export function ProductionPage() {
   const navigate = useNavigate();
-  const [productions, setProductions] = useState<Map<number, ProductionItem>>(new Map());
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    setErr(null);
-    setLoading(true);
-    try {
-      const data = await orderApi.list();
-      const orderList: OrderDto[] = Array.isArray(data) ? data : [];
-
-      setProductions((prev) => {
-        const newMap = new Map(prev);
-        orderList.forEach((o) => {
-          const orderId = o?.id ?? o?.orderId;
-          if (orderId && !newMap.has(orderId)) {
-            newMap.set(orderId, {
-              orderId,
-              vehicleModelId: o?.vehicleModelId ?? o?.modelId ?? 0,
-              orderQty: o?.orderQty ?? o?.quantity ?? 0,
-              currentStage: 0,
-              stageResults: PIPELINE_STAGES.map(() => ({ status: "waiting" as StageStatus })),
-            });
-          }
-        });
-        return newMap;
-      });
-    } catch (e: any) {
-      setErr(e?.message ?? "주문 목록 조회 실패");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { productions, loading, error, refresh, startProduction } = useProduction();
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  // 실제 ML API를 호출하며 파이프라인 진행
-  const startProduction = useCallback(async (orderId: number) => {
-    // 시작 상태로 변경
-    setProductions((prev) => {
-      const newMap = new Map(prev);
-      const production = newMap.get(orderId);
-      if (production) {
-        production.stageResults[0] = { status: "running" };
-        production.startedAt = new Date().toISOString();
-        newMap.set(orderId, { ...production });
-      }
-      return newMap;
-    });
-
-    // 각 공정을 순차적으로 실행
-    for (let stageIdx = 0; stageIdx < PIPELINE_STAGES.length; stageIdx++) {
-      const stage = PIPELINE_STAGES[stageIdx];
-
-      // 공정별 소요 시간 계산 (min ~ max 사이 랜덤)
-      const stageDuration = stage.duration.min + Math.random() * (stage.duration.max - stage.duration.min);
-      const stageStartTime = Date.now();
-
-      // 현재 단계 실행중으로 표시 (예상 시간 포함)
-      setProductions((prev) => {
-        const newMap = new Map(prev);
-        const production = newMap.get(orderId);
-        if (production) {
-          production.currentStage = stageIdx;
-          production.stageResults[stageIdx] = {
-            status: "running",
-            startedAt: stageStartTime,
-            estimatedDuration: stageDuration,
-          };
-          newMap.set(orderId, { ...production });
-        }
-        return newMap;
-      });
-
-      // ML API 호출
-      let hasAnomaly = false;
-      const mlResults: any[] = [];
-
-      if (stage.mlEndpoints.length > 0) {
-        for (const endpoint of stage.mlEndpoints) {
-          try {
-            const result = await callMLApi(endpoint);
-            mlResults.push(result);
-            if (checkAnomaly(result)) {
-              hasAnomaly = true;
-            }
-          } catch (error) {
-            console.error(`Stage ${stage.id} ML call failed:`, error);
-            // API 실패 시에도 계속 진행 (시뮬레이션)
-          }
-        }
-      }
-
-      // 공정 소요 시간이 될 때까지 대기 (ML API 호출 시간 제외)
-      const elapsed = Date.now() - stageStartTime;
-      const remainingTime = Math.max(0, stageDuration - elapsed);
-      if (remainingTime > 0) {
-        await new Promise((resolve) => setTimeout(resolve, remainingTime));
-      }
-
-      // 결과 업데이트
-      setProductions((prev) => {
-        const newMap = new Map(prev);
-        const production = newMap.get(orderId);
-        if (production) {
-          production.stageResults[stageIdx] = {
-            status: hasAnomaly ? "stopped" : "completed",
-            mlResults,
-            hasAnomaly,
-            message: hasAnomaly ? "이상이 감지되었습니다" : "정상",
-          };
-
-          // 이상 감지 시 중단
-          if (hasAnomaly) {
-            production.isStopped = true;
-          }
-
-          // 마지막 단계면 완료 시간 기록
-          if (stageIdx === PIPELINE_STAGES.length - 1 && !hasAnomaly) {
-            production.completedAt = new Date().toISOString();
-          }
-
-          newMap.set(orderId, { ...production });
-        }
-        return newMap;
-      });
-
-      // 이상 감지 시 파이프라인 중단
-      if (hasAnomaly) {
-        console.log(`Production ${orderId}: Anomaly detected at ${stage.name}, stopping pipeline`);
-        return; // 파이프라인 중단
-      }
-    }
-  }, []);
-
-  // 재검사: 중단된 공정을 다시 실행 (다음 데이터 사용)
-  const retryStage = useCallback(async (orderId: number) => {
-    const production = productions.get(orderId);
-    if (!production) return;
-
-    const stoppedIdx = production.stageResults.findIndex((r) => r.status === "stopped");
-    if (stoppedIdx === -1) return;
-
-    // 이전 재시도 횟수 가져오기 (다음 데이터 사용을 위해)
-    const prevRetryCount = production.stageResults[stoppedIdx]?.retryCount || 0;
-    const newRetryCount = prevRetryCount + 1;
-
-    // isStopped 해제 후 해당 단계부터 재시작
-    setProductions((prev) => {
-      const newMap = new Map(prev);
-      const prod = newMap.get(orderId);
-      if (prod) {
-        prod.isStopped = false;
-        prod.stageResults[stoppedIdx] = { status: "running", retryCount: newRetryCount };
-        newMap.set(orderId, { ...prod });
-      }
-      return newMap;
-    });
-
-    // 해당 단계부터 파이프라인 재개
-    for (let stageIdx = stoppedIdx; stageIdx < PIPELINE_STAGES.length; stageIdx++) {
-      const stage = PIPELINE_STAGES[stageIdx];
-      const stageDuration = stage.duration.min + Math.random() * (stage.duration.max - stage.duration.min);
-      const stageStartTime = Date.now();
-
-      // 현재 단계의 재시도 횟수 (첫 단계만 증가된 값 사용, 이후는 0)
-      const currentRetryCount = stageIdx === stoppedIdx ? newRetryCount : 0;
-
-      setProductions((prev) => {
-        const newMap = new Map(prev);
-        const prod = newMap.get(orderId);
-        if (prod) {
-          prod.currentStage = stageIdx;
-          prod.stageResults[stageIdx] = {
-            status: "running",
-            startedAt: stageStartTime,
-            estimatedDuration: stageDuration,
-            retryCount: currentRetryCount,
-          };
-          newMap.set(orderId, { ...prod });
-        }
-        return newMap;
-      });
-
-      let hasAnomaly = false;
-      const mlResults: any[] = [];
-
-      if (stage.mlEndpoints.length > 0) {
-        for (const endpoint of stage.mlEndpoints) {
-          try {
-            // offset 파라미터로 다른 데이터 사용
-            const result = await callMLApi(endpoint, currentRetryCount);
-            mlResults.push(result);
-            if (checkAnomaly(result)) hasAnomaly = true;
-          } catch (error) {
-            console.error(`Stage ${stage.id} ML call failed:`, error);
-          }
-        }
-      }
-
-      const elapsed = Date.now() - stageStartTime;
-      const remainingTime = Math.max(0, stageDuration - elapsed);
-      if (remainingTime > 0) {
-        await new Promise((resolve) => setTimeout(resolve, remainingTime));
-      }
-
-      setProductions((prev) => {
-        const newMap = new Map(prev);
-        const prod = newMap.get(orderId);
-        if (prod) {
-          prod.stageResults[stageIdx] = {
-            status: hasAnomaly ? "stopped" : "completed",
-            mlResults,
-            hasAnomaly,
-            message: hasAnomaly ? "이상이 감지되었습니다" : "정상",
-            retryCount: currentRetryCount,
-          };
-          if (hasAnomaly) prod.isStopped = true;
-          if (stageIdx === PIPELINE_STAGES.length - 1 && !hasAnomaly) {
-            prod.completedAt = new Date().toISOString();
-          }
-          newMap.set(orderId, { ...prod });
-        }
-        return newMap;
-      });
-
-      if (hasAnomaly) return;
-    }
-  }, [productions]);
-
-  // 건너뛰기: 이상 감지된 공정을 무시하고 다음으로 진행
-  const skipStage = useCallback(async (orderId: number) => {
-    const production = productions.get(orderId);
-    if (!production) return;
-
-    const stoppedIdx = production.stageResults.findIndex((r) => r.status === "stopped");
-    if (stoppedIdx === -1) return;
-
-    // 현재 단계를 completed로 변경 (이상 유지)하고 다음 단계로
-    setProductions((prev) => {
-      const newMap = new Map(prev);
-      const prod = newMap.get(orderId);
-      if (prod) {
-        prod.isStopped = false;
-        prod.stageResults[stoppedIdx] = {
-          ...prod.stageResults[stoppedIdx],
-          status: "completed",
-        };
-        newMap.set(orderId, { ...prod });
-      }
-      return newMap;
-    });
-
-    // 다음 단계부터 진행
-    const nextIdx = stoppedIdx + 1;
-    if (nextIdx >= PIPELINE_STAGES.length) {
-      // 마지막 단계였으면 완료 처리
-      setProductions((prev) => {
-        const newMap = new Map(prev);
-        const prod = newMap.get(orderId);
-        if (prod) {
-          prod.completedAt = new Date().toISOString();
-          newMap.set(orderId, { ...prod });
-        }
-        return newMap;
-      });
-      return;
-    }
-
-    // 나머지 단계 실행
-    for (let stageIdx = nextIdx; stageIdx < PIPELINE_STAGES.length; stageIdx++) {
-      const stage = PIPELINE_STAGES[stageIdx];
-      const stageDuration = stage.duration.min + Math.random() * (stage.duration.max - stage.duration.min);
-      const stageStartTime = Date.now();
-
-      setProductions((prev) => {
-        const newMap = new Map(prev);
-        const prod = newMap.get(orderId);
-        if (prod) {
-          prod.currentStage = stageIdx;
-          prod.stageResults[stageIdx] = {
-            status: "running",
-            startedAt: stageStartTime,
-            estimatedDuration: stageDuration,
-          };
-          newMap.set(orderId, { ...prod });
-        }
-        return newMap;
-      });
-
-      let hasAnomaly = false;
-      const mlResults: any[] = [];
-
-      if (stage.mlEndpoints.length > 0) {
-        for (const endpoint of stage.mlEndpoints) {
-          try {
-            const result = await callMLApi(endpoint);
-            mlResults.push(result);
-            if (checkAnomaly(result)) hasAnomaly = true;
-          } catch (error) {
-            console.error(`Stage ${stage.id} ML call failed:`, error);
-          }
-        }
-      }
-
-      const elapsed = Date.now() - stageStartTime;
-      const remainingTime = Math.max(0, stageDuration - elapsed);
-      if (remainingTime > 0) {
-        await new Promise((resolve) => setTimeout(resolve, remainingTime));
-      }
-
-      setProductions((prev) => {
-        const newMap = new Map(prev);
-        const prod = newMap.get(orderId);
-        if (prod) {
-          prod.stageResults[stageIdx] = {
-            status: hasAnomaly ? "stopped" : "completed",
-            mlResults,
-            hasAnomaly,
-            message: hasAnomaly ? "이상이 감지되었습니다" : "정상",
-          };
-          if (hasAnomaly) prod.isStopped = true;
-          if (stageIdx === PIPELINE_STAGES.length - 1 && !hasAnomaly) {
-            prod.completedAt = new Date().toISOString();
-          }
-          newMap.set(orderId, { ...prod });
-        }
-        return newMap;
-      });
-
-      if (hasAnomaly) return;
-    }
-  }, [productions]);
-
-  const handleStageClick = (_stageId: string, stage: typeof PIPELINE_STAGES[0]) => {
-    // 해당 공정의 상세 페이지로 이동
+  const handleStageClick = (_stageId: string, stage: (typeof PIPELINE_STAGES)[0]) => {
     navigate(stage.detailPage);
   };
 
@@ -785,6 +482,9 @@ export function ProductionPage() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* ✅ 신호등 깜빡/발광 CSS 주입 */}
+      <style>{trafficCss}</style>
+
       {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -793,23 +493,32 @@ export function ProductionPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">생산 관리</h1>
-            <p className="text-sm text-slate-500">자동차 제조 공정 파이프라인 (실시간 ML 분석)</p>
+            <p className="text-sm text-slate-500">자동차 제조 공정 파이프라인</p>
           </div>
         </div>
-        <button onClick={refresh} className="flex items-center gap-2 px-4 py-2 rounded-lg border hover:bg-slate-50">
+        <button
+          onClick={refresh}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg border hover:bg-slate-50"
+        >
           <RefreshCcw className="w-4 h-4" />
           새로고침
         </button>
       </div>
 
-      {err && <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-sm">{err}</div>}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
 
       {/* 공정 범례 */}
       <div className="bg-white rounded-xl border shadow-sm p-4">
-        <div className="text-sm font-semibold text-slate-700 mb-3">공정 단계 (클릭 시 상세 페이지 이동)</div>
+        <div className="text-sm font-semibold text-slate-700 mb-3">
+          공정 단계 (클릭 시 상세 페이지 이동)
+        </div>
         <div className="flex flex-wrap gap-4">
           {PIPELINE_STAGES.map((stage) => {
-            const Icon = stage.icon;
+            const Icon = STAGE_ICONS[stage.id] || ClipboardCheck;
             return (
               <button
                 key={stage.id}
@@ -848,8 +557,6 @@ export function ProductionPage() {
               onStart={() => startProduction(production.orderId)}
               onStageClick={handleStageClick}
               onViewDetail={handleViewDetail}
-              onRetry={() => retryStage(production.orderId)}
-              onSkip={() => skipStage(production.orderId)}
             />
           ))
         )}
