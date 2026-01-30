@@ -63,6 +63,18 @@ def get_auto_sequence_info() -> Dict[str, int]:
         next_idx = int(_auto_state.get("idx", 0)) if count else 0
         return {"index_next": next_idx, "count": count}
 
+
+def skip_to_next_image():
+    """
+    ✅ 이미지를 1개 건너뛰기 (재검사 시 다른 이미지 사용)
+    """
+    with _auto_lock:
+        files = _list_auto_files()
+        _auto_state["files"] = files
+        if files:
+            _auto_state["idx"] = (_auto_state["idx"] + 1) % len(files)
+
+
 async def predict_welding_image(file: UploadFile):
     """
     기존 업로드 방식(유지)

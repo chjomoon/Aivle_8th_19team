@@ -293,6 +293,18 @@ def _pick_next_paint_image():
     return path
 
 
+def skip_to_next_image():
+    """
+    ✅ 이미지를 1개 건너뛰기 (재검사 시 다른 이미지 사용)
+    """
+    _refresh_paint_auto_files()
+    files = paint_auto_state.get("files", [])
+    if files:
+        paint_auto_state["idx"] = (paint_auto_state["idx"] + 1) % len(files)
+        # throttle 캐시도 무효화하여 즉시 새 이미지 사용
+        paint_auto_state["last_result"] = None
+
+
 def predict_paint_defect_auto(*, base_dir: str, save_image_dir: str, save_label_dir: str, save_result_dir: str,
                              backend_url: str = "http://localhost:3001/api/paint-analysis"):
     """

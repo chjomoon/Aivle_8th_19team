@@ -10,8 +10,6 @@ import {
   ClipboardList,
   ShieldCheck,
   ShoppingCart,
-  ListChecks,
-  BarChart3,
   ArrowLeftRight,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -54,13 +52,12 @@ export function Sidebar({ username, onLogout }: SidebarProps) {
   );
 
   const orderMenuItems = useMemo(
-  () => [
-    { path: "/order/orders", label: "주문", icon: ShoppingCart },
-    { path: "/order/production", label: "생산", icon: Factory },
-    { path: "/order/process", label: "공정", icon: ListChecks },
-  ],
-  []
-);
+    () => [
+      { path: "/order/orders", label: "주문", icon: ShoppingCart },
+      { path: "/order/production", label: "생산", icon: Factory },
+    ],
+    []
+  );
 
   const menuItems = mode === "process" ? processMenuItems : orderMenuItems;
 

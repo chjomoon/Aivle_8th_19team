@@ -346,6 +346,16 @@ def _pick_next_sample_image_path():
     return path
 
 
+def skip_to_next_image():
+    """
+    ✅ 이미지를 1개 건너뛰기 (재검사 시 다른 이미지 사용)
+    """
+    _refresh_image_list()
+    files = image_seq_state["files"]
+    if files:
+        image_seq_state["idx"] = (image_seq_state["idx"] + 1) % len(files)
+
+
 def _load_and_preprocess_for_cnn(img_path: str, H: int, W: int, C: int):
     """
     - CNN 입력 (1,H,W,C) 생성

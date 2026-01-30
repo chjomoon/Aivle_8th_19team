@@ -61,10 +61,11 @@ public class MLProxyController {
      * POST /api/v1/ml/welding/image/auto
      */
     @PostMapping("/welding/image/auto")
-    public ResponseEntity<JsonNode> analyzeWeldingImageAuto() {
+    public ResponseEntity<JsonNode> analyzeWeldingImageAuto(
+            @RequestParam(value = "offset", required = false, defaultValue = "0") Integer offset) {
         try {
-            log.info("Welding image auto analysis request");
-            JsonNode result = mlProxyService.analyzeWeldingImageAuto();
+            log.info("Welding image auto analysis request - offset: {}", offset);
+            JsonNode result = mlProxyService.analyzeWeldingImageAuto(offset);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             log.error("Error in welding image analysis: {}", e.getMessage(), e);
@@ -77,10 +78,11 @@ public class MLProxyController {
      * POST /api/v1/ml/paint/auto
      */
     @PostMapping("/paint/auto")
-    public ResponseEntity<JsonNode> analyzePaintAuto() {
+    public ResponseEntity<JsonNode> analyzePaintAuto(
+            @RequestParam(value = "offset", required = false, defaultValue = "0") Integer offset) {
         try {
-            log.info("Paint auto analysis request");
-            JsonNode result = mlProxyService.analyzePaintAuto();
+            log.info("Paint auto analysis request - offset: {}", offset);
+            JsonNode result = mlProxyService.analyzePaintAuto(offset);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             log.error("Error in paint analysis: {}", e.getMessage(), e);
@@ -93,10 +95,11 @@ public class MLProxyController {
      * POST /api/v1/ml/press/vibration
      */
     @PostMapping("/press/vibration")
-    public ResponseEntity<JsonNode> analyzePressVibration() {
+    public ResponseEntity<JsonNode> analyzePressVibration(
+            @RequestParam(value = "offset", required = false, defaultValue = "0") Integer offset) {
         try {
-            log.info("Press vibration analysis request");
-            JsonNode result = mlProxyService.analyzePressVibration();
+            log.info("Press vibration analysis request - offset: {}", offset);
+            JsonNode result = mlProxyService.analyzePressVibration(offset);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             log.error("Error in press vibration analysis: {}", e.getMessage(), e);
@@ -109,10 +112,11 @@ public class MLProxyController {
      * POST /api/v1/ml/press/image
      */
     @PostMapping("/press/image")
-    public ResponseEntity<JsonNode> analyzePressImage() {
+    public ResponseEntity<JsonNode> analyzePressImage(
+            @RequestParam(value = "offset", required = false, defaultValue = "0") Integer offset) {
         try {
-            log.info("Press image analysis request");
-            JsonNode result = mlProxyService.analyzePressImage();
+            log.info("Press image analysis request - offset: {}", offset);
+            JsonNode result = mlProxyService.analyzePressImage(offset);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             log.error("Error in press image analysis: {}", e.getMessage(), e);
@@ -126,10 +130,11 @@ public class MLProxyController {
      */
     @PostMapping("/body/inspect/batch/auto")
     public ResponseEntity<JsonNode> analyzeBodyAssemblyBatchAuto(
-            @RequestParam(value = "conf", required = false, defaultValue = "0.5") Double confidence) {
+            @RequestParam(value = "conf", required = false, defaultValue = "0.5") Double confidence,
+            @RequestParam(value = "offset", required = false, defaultValue = "0") Integer offset) {
         try {
-            log.info("Body assembly batch auto analysis request - confidence: {}", confidence);
-            JsonNode result = mlProxyService.analyzeBodyAssemblyBatchAuto(confidence);
+            log.info("Body assembly batch auto analysis request - confidence: {}, offset: {}", confidence, offset);
+            JsonNode result = mlProxyService.analyzeBodyAssemblyBatchAuto(confidence, offset);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             log.error("Error in body assembly analysis: {}", e.getMessage(), e);

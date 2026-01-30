@@ -168,6 +168,15 @@ def _list_sample_images(base_dir: str, part: str) -> List[str]:
     return paths
 
 
+def skip_to_next_image(part: str):
+    """
+    ✅ 특정 파트의 이미지를 1개 건너뛰기 (재검사 시 다른 이미지 사용)
+    """
+    part = part.strip().lower()
+    if part in ALLOWED_PARTS:
+        AUTO_STATE["INDEX"][part] = AUTO_STATE["INDEX"].get(part, 0) + 1
+
+
 def predict_part_auto(
     part: str,
     base_dir: str,

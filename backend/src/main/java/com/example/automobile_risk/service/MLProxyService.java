@@ -72,9 +72,18 @@ public class MLProxyService {
      * 파일 없이 FastAPI 호출 (프레스 진동 등)
      */
     public JsonNode callMLServiceWithoutFile(String endpoint, String serviceType) {
+        return callMLServiceWithoutFile(endpoint, serviceType, 0);
+    }
+
+    /**
+     * 파일 없이 FastAPI 호출 (offset 지원)
+     */
+    public JsonNode callMLServiceWithoutFile(String endpoint, String serviceType, int offset) {
         try {
-            String url = mlServiceBaseUrl + endpoint;
-            log.info("Calling ML Service (no file): {}", url);
+            // offset 파라미터 추가
+            String separator = endpoint.contains("?") ? "&" : "?";
+            String url = mlServiceBaseUrl + endpoint + separator + "offset=" + offset;
+            log.info("Calling ML Service (no file): {} with offset: {}", url, offset);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -197,38 +206,38 @@ public class MLProxyService {
     /**
      * 용접 이미지 분석 (자동)
      */
-    public JsonNode analyzeWeldingImageAuto() {
-        return callMLServiceWithoutFile("/api/v1/smartfactory/welding/image/auto", "welding_image");
+    public JsonNode analyzeWeldingImageAuto(int offset) {
+        return callMLServiceWithoutFile("/api/v1/smartfactory/welding/image/auto", "welding_image", offset);
     }
 
     /**
      * 도장 품질 분석 (자동)
      */
-    public JsonNode analyzePaintAuto() {
-        return callMLServiceWithoutFile("/api/v1/smartfactory/paint/auto", "paint");
+    public JsonNode analyzePaintAuto(int offset) {
+        return callMLServiceWithoutFile("/api/v1/smartfactory/paint/auto", "paint", offset);
     }
 
     /**
      * 프레스 진동 분석
      */
-    public JsonNode analyzePressVibration() {
-        return callMLServiceWithoutFile("/api/v1/smartfactory/press/vibration", "press_vibration");
+    public JsonNode analyzePressVibration(int offset) {
+        return callMLServiceWithoutFile("/api/v1/smartfactory/press/vibration", "press_vibration", offset);
     }
 
     /**
      * 프레스 이미지 분석
      */
-    public JsonNode analyzePressImage() {
-        return callMLServiceWithoutFile("/api/v1/smartfactory/press/image", "press_image");
+    public JsonNode analyzePressImage(int offset) {
+        return callMLServiceWithoutFile("/api/v1/smartfactory/press/image", "press_image", offset);
     }
 
     /**
      * 차체 조립 분석 (자동 배치)
      */
-    public JsonNode analyzeBodyAssemblyBatchAuto(Double confidence) {
+    public JsonNode analyzeBodyAssemblyBatchAuto(Double confidence, int offset) {
         try {
-            String url = mlServiceBaseUrl + "/api/v1/smartfactory/body/inspect/batch/auto";
-            log.info("Calling ML Service (body batch auto): {}", url);
+            String url = mlServiceBaseUrl + "/api/v1/smartfactory/body/inspect/batch/auto?offset=" + offset;
+            log.info("Calling ML Service (body batch auto): {} with offset: {}", url, offset);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.MULTIPART_FORM_DATA);

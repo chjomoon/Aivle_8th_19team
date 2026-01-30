@@ -1,25 +1,41 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { orderApi, OrderDto } from "@/api/order";
+import { ClipboardList, Plus, RefreshCcw, Trash2 } from "lucide-react";
 
 function safeId(o: any) {
   return o?.id ?? o?.orderId ?? o?._id;
 }
-function safeStatus(o: any) {
-  return (o?.status ?? o?.orderStatus ?? "").toString().toUpperCase();
-}
-function isDone(o: any) {
-  const s = safeStatus(o);
-  return s.includes("DONE") || s.includes("COMPLETE") || s.includes("COMPLETED");
-}
+
 function getField(o: any, keys: string[], fallback = "-") {
   for (const k of keys) if (o?.[k] !== undefined && o?.[k] !== null && o?.[k] !== "") return o[k];
   return fallback;
 }
 
-// input[type="date"] 값을 ISO로 변환 (YYYY-MM-DD -> YYYY-MM-DDT00:00:00.000Z)
+function formatDate(dateStr: string | null | undefined) {
+  if (!dateStr) return "-";
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" });
+  } catch {
+    return dateStr;
+  }
+}
+
+function getStatusBadge(status: string) {
+  const s = (status || "").toUpperCase();
+  if (s.includes("DONE") || s.includes("COMPLETE")) {
+    return <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">완료</span>;
+  }
+  if (s.includes("CANCEL")) {
+    return <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">취소</span>;
+  }
+  if (s.includes("PROGRESS") || s.includes("PRODUCTION")) {
+    return <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">생산중</span>;
+  }
+  return <span className="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-700">대기</span>;
+}
+
 function dateToISO(dateStr: string) {
-  // dateStr: "2026-01-28"
-  // UTC 00:00로 저장(표준)
   return new Date(`${dateStr}T00:00:00`).toISOString();
 }
 
@@ -28,7 +44,7 @@ export function OrderPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  // ✅ 입력 폼 state
+  // 입력 폼 state
   const [orderDate, setOrderDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [orderQty, setOrderQty] = useState<number>(1);
@@ -51,14 +67,10 @@ export function OrderPage() {
     refresh();
   }, []);
 
-  const inProgress = useMemo(() => orders.filter((o) => !isDone(o)), [orders]);
-  const done = useMemo(() => orders.filter((o) => isDone(o)), [orders]);
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null);
 
-    // ✅ Swagger 스펙에 맞춘 payload
     const payload = {
       orderDate: dateToISO(orderDate),
       dueDate: dateToISO(dueDate),
@@ -66,7 +78,6 @@ export function OrderPage() {
       vehicleModelId: Number(vehicleModelId),
     };
 
-    // 간단 유효성
     if (!orderDate || !dueDate) {
       setErr("주문 날짜/납기 일자를 입력하세요.");
       return;
@@ -92,16 +103,8 @@ export function OrderPage() {
     }
   };
 
-  const complete = async (id: any) => {
-    try {
-      await orderApi.complete(id);
-      await refresh();
-    } catch (e: any) {
-      setErr(e?.message ?? "주문 완료 처리 실패");
-    }
-  };
-
   const cancel = async (id: any) => {
+    if (!confirm("이 주문을 취소하시겠습니까?")) return;
     try {
       await orderApi.cancel(id);
       await refresh();
@@ -111,9 +114,25 @@ export function OrderPage() {
   };
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-6 space-y-6">
+      {/* 헤더 */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-blue-100 rounded-lg">
+            <ClipboardList className="w-6 h-6 text-blue-600" />
+          </div>
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">주문</h1>
+            <h1 className="text-2xl font-bold text-slate-900">주문 관리</h1>
+            <p className="text-sm text-slate-500">신규 주문 입력 및 주문 내역 조회</p>
+          </div>
+        </div>
+        <button
+          onClick={refresh}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg border hover:bg-slate-50 transition-colors"
+        >
+          <RefreshCcw className="w-4 h-4" />
+          새로고침
+        </button>
       </div>
 
       {err && (
@@ -122,37 +141,40 @@ export function OrderPage() {
         </div>
       )}
 
-      {/* 위: 주문 입력 */}
-      <div className="bg-white rounded-xl border p-4">
-        <div className="text-sm font-semibold">주문 입력</div>
-
-        <form onSubmit={submit} className="mt-3 grid grid-cols-1 md:grid-cols-4 gap-3">
+      {/* 주문 입력 폼 */}
+      <div className="bg-white rounded-xl border shadow-sm">
+        <div className="px-4 py-3 border-b bg-slate-50 rounded-t-xl">
+          <div className="flex items-center gap-2">
+            <Plus className="w-4 h-4 text-slate-600" />
+            <span className="font-semibold text-slate-700">신규 주문 입력</span>
+          </div>
+        </div>
+        <form onSubmit={submit} className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
-            <div className="text-xs text-slate-600 mb-1">주문 날짜</div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">주문 날짜</label>
             <input
-              className="w-full border rounded-lg px-3 py-2"
+                className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               type="date"
               value={orderDate}
               onChange={(e) => setOrderDate(e.target.value)}
               required
             />
           </div>
-
           <div>
-            <div className="text-xs text-slate-600 mb-1">납기 일자</div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">납기 일자</label>
             <input
-              className="w-full border rounded-lg px-3 py-2"
+                className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
               required
             />
           </div>
-
           <div>
-            <div className="text-xs text-slate-600 mb-1">주문 갯수</div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">주문 수량</label>
             <input
-              className="w-full border rounded-lg px-3 py-2"
+                className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               type="number"
               min={1}
               value={orderQty}
@@ -160,107 +182,102 @@ export function OrderPage() {
               required
             />
           </div>
-
           <div>
-            <div className="text-xs text-slate-600 mb-1">차량 모델 ID</div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">차량 모델 ID</label>
             <input
-              className="w-full border rounded-lg px-3 py-2"
+                className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               value={vehicleModelId}
               onChange={(e) => setVehicleModelId(e.target.value)}
               placeholder="예) 1"
               required
             />
           </div>
-
-          <div className="md:col-span-4 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={refresh}
-              className="px-4 py-2 rounded-lg border hover:bg-slate-50"
-            >
-              새로고침
-            </button>
-            <button className="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700">
-              주문 추가
+          </div>
+          <div className="mt-4 flex justify-end">
+            <button className="flex items-center gap-2 px-6 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors">
+              <Plus className="w-4 h-4" />
+              주문 등록
             </button>
           </div>
         </form>
       </div>
 
-      {/* 중간: 주문중 */}
-      <div className="bg-white rounded-xl border p-4">
-        <div className="text-sm font-semibold">주문중 ({inProgress.length})</div>
-        <div className="mt-3">
+      {/* 주문 내역 테이블 */}
+      <div className="bg-white rounded-xl border shadow-sm">
+        <div className="px-4 py-3 border-b bg-slate-50 rounded-t-xl">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-slate-700">주문 내역</span>
+            <span className="text-sm text-slate-500">총 {orders.length}건</span>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-slate-50 border-b">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">주문번호</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">차량 모델</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">수량</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">주문일</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">납기일</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">상태</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">액션</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
           {loading ? (
-            <div className="text-sm text-slate-500">불러오는 중...</div>
-          ) : inProgress.length === 0 ? (
-            <div className="text-sm text-slate-500">주문중 항목이 없습니다.</div>
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                    불러오는 중...
+                  </td>
+                </tr>
+              ) : orders.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                    주문 내역이 없습니다.
+                  </td>
+                </tr>
           ) : (
-            inProgress.map((o) => {
+                orders.map((o) => {
               const id = safeId(o);
+                  const status = getField(o, ["status", "orderStatus"], "PENDING");
+                  const canCancel = !status.toUpperCase().includes("CANCEL") && !status.toUpperCase().includes("COMPLETE");
               return (
-                <div
-                  key={String(id)}
-                  className="flex items-center justify-between gap-3 p-3 rounded-lg border mb-2"
-                >
-                  <div className="min-w-0">
-                    <div className="font-semibold text-slate-900">
-                      모델: {getField(o, ["vehicleModelId", "modelId"])} ·{" "}
-                      {getField(o, ["orderQty", "quantity", "count"], "-")}대
-                    </div>
-                    <div className="text-xs text-slate-500 mt-1">
-                      주문일: {getField(o, ["orderDate"])} · 납기:{" "}
-                      {getField(o, ["dueDate", "deadline"])} · 상태:{" "}
-                      {getField(o, ["status", "orderStatus"], "IN_PROGRESS")}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => complete(id)}
-                      className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-sm hover:bg-slate-800"
-                    >
-                      주문완료
-                    </button>
+                    <tr key={String(id)} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <span className="font-mono font-semibold text-slate-900">#{id}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-slate-700">모델 {getField(o, ["vehicleModelId", "modelId"])}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="font-semibold text-slate-900">{getField(o, ["orderQty", "quantity", "count"])}대</span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 text-sm">
+                        {formatDate(getField(o, ["orderDate"], null))}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 text-sm">
+                        {formatDate(getField(o, ["dueDate", "deadline"], null))}
+                      </td>
+                      <td className="px-4 py-3">
+                        {getStatusBadge(status)}
+                      </td>
+                      <td className="px-4 py-3">
+                        {canCancel && (
                     <button
                       onClick={() => cancel(id)}
-                      className="px-3 py-1.5 rounded-lg border text-sm hover:bg-slate-50"
+                            className="flex items-center gap-1 px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded transition-colors"
                     >
+                            <Trash2 className="w-3 h-3" />
                       취소
                     </button>
-                  </div>
-                </div>
+                        )}
+                      </td>
+                    </tr>
               );
             })
           )}
-        </div>
-      </div>
-
-      {/* 하단: 주문완료 */}
-      <div className="bg-white rounded-xl border p-4">
-        <div className="text-sm font-semibold">주문완료 ({done.length})</div>
-        <div className="mt-3">
-          {loading ? (
-            <div className="text-sm text-slate-500">불러오는 중...</div>
-          ) : done.length === 0 ? (
-            <div className="text-sm text-slate-500">주문완료 항목이 없습니다.</div>
-          ) : (
-            done.map((o) => {
-              const id = safeId(o);
-              return (
-                <div key={String(id)} className="p-3 rounded-lg border mb-2">
-                  <div className="font-semibold text-slate-900">
-                    모델: {getField(o, ["vehicleModelId", "modelId"])} ·{" "}
-                    {getField(o, ["orderQty", "quantity", "count"], "-")}대
-                  </div>
-                  <div className="text-xs text-slate-500 mt-1">
-                    주문일: {getField(o, ["orderDate"])} · 납기:{" "}
-                    {getField(o, ["dueDate", "deadline"])} · 상태:{" "}
-                    {getField(o, ["status", "orderStatus"], "DONE")}
-                  </div>
-                </div>
-              );
-            })
-          )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

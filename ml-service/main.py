@@ -185,10 +185,14 @@ async def predict_welding_original(file: UploadFile = File(...)):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-# ✅ 자동 입력(폴더 순차)
+# ✅ 자동 입력(폴더 순차) - offset 지원
 @app.post("/api/v1/smartfactory/welding/image/auto")
-async def predict_welding_auto():
+async def predict_welding_auto(offset: int = 0):
     try:
+        # offset > 0이면 추가로 이미지 건너뛰기 (재검사 시 다른 이미지 사용)
+        for _ in range(offset):
+            welding_image.skip_to_next_image()
+
         # result = {"status","defects","result_image_path", "source","sequence","original_image_path"}
         result = welding_image.predict_welding_image_auto()
 
@@ -250,10 +254,14 @@ async def predict_paint_endpoint(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
     
 @app.post("/api/v1/smartfactory/paint/auto")
-def predict_paint_auto():
+def predict_paint_auto(offset: int = 0):
     try:
         if PAINT_CFG is None:
             raise HTTPException(status_code=500, detail="paint config not initialized")
+
+        # offset > 0이면 추가로 이미지 건너뛰기 (재검사 시 다른 이미지 사용)
+        for _ in range(offset):
+            paint_service.skip_to_next_image()
 
         result = paint_service.predict_paint_defect_auto(
             base_dir=BASE_DIR,
@@ -270,19 +278,23 @@ def predict_paint_auto():
         raise HTTPException(status_code=500, detail=str(e))
     
 # =========================
-# PRESS APIs (SIM INPUT)
+# PRESS APIs (SIM INPUT) - offset 지원
 # =========================
 @app.post("/api/v1/smartfactory/press/vibration")
-def predict_press_vibration():
+def predict_press_vibration(offset: int = 0):
     try:
+        # offset은 vibration 시뮬에서는 의미가 덜하지만 일관성을 위해 수용
         return press.predict_vibration_anomaly_sim()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/v1/smartfactory/press/image")
-async def predict_press_image():
+async def predict_press_image(offset: int = 0):
     try:
+        # offset > 0이면 추가로 이미지 건너뛰기
+        for _ in range(offset):
+            press.skip_to_next_image()
         return await press.predict_press_image_sim()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -408,11 +420,18 @@ async def body_inspect_auto(
 @app.post("/api/v1/smartfactory/body/inspect/batch/auto")
 async def body_inspect_batch_auto(
     conf: float = Form(0.25),
+    offset: int = 0,
 ):
     """
     5개 파트 모두 samples에서 자동으로 하나씩 꺼내서 배치 검사
+    offset > 0이면 각 파트의 이미지를 건너뛰어 다른 이미지 사용
     """
     try:
+        # offset만큼 각 파트의 이미지 건너뛰기
+        for _ in range(offset):
+            for part in ["door", "bumper", "headlamp", "taillamp", "radiator"]:
+                body_service.skip_to_next_image(part)
+
         results = {}
         for part in ["door", "bumper", "headlamp", "taillamp", "radiator"]:
             try:
